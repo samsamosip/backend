@@ -47,6 +47,13 @@ curl -X POST localhost:8080/api/v1/admin/ontong/sync
 | `GET /api/v1/policies?category=&page=&size=` | 지금 신청할 수 있는 공고. 마감 임박순, 마감일 없는(상시) 공고는 뒤로. `size` 최대 100 |
 | `GET /api/v1/policies/{id}` | 공고 상세. 자격 조건은 온통청년 코드 그대로(`jobCd`, `schoolCd` 등) |
 | `POST /api/v1/admin/ontong/sync` | 온통청년 전체 수집. 결과 `{fetched, created, updated, unchanged}` |
+| `GET /api/v1/codes` | 온보딩 선택지(`jobCd`, `schoolCd`, `mrgSttsCd`, `plcyMajorCd`, `sbizCd`, `housingType`, `interestCategories`)의 code·label |
+| `GET /api/v1/me/profile` | 내 프로필. 만 나이(`age`), 주민등록 시도(`residenceSido`), 아직 비어 있는 항목(`missingFields`) 포함. 없으면 404 |
+| `PUT /api/v1/me/profile` | 내 프로필 전체 저장. 보내지 않은 항목은 "모름"으로 비워진다 |
+| `DELETE /api/v1/me` | 내 데이터 삭제 |
+
+`/me` 경로는 로그인이 생기기 전까지 `X-Anonymous-Id` 헤더(UUID)로 사람을 구분한다. 프론트가 처음 방문 때
+UUID를 만들어 localStorage에 두고 매 요청에 보낸다. 헤더가 없거나 UUID가 아니면 400.
 
 `category`는 공식 대분류 5개 중 하나다: `일자리`, `주거`, `교육`, `복지문화`, `참여권리`.
 
@@ -65,6 +72,17 @@ curl -X POST localhost:8080/api/v1/admin/ontong/sync
   "regions": ["강원"]
 }
 ```
+
+### 프로필 저장 예
+
+```bash
+curl -X PUT localhost:8080/api/v1/me/profile \
+  -H "X-Anonymous-Id: 6f1c2b7e-1d1a-4c55-9a6b-0d6a3a1e2f00" -H "Content-Type: application/json" \
+  -d '{"birthDate":"2003-06-12","zipCd":"11620","jobCd":"0013003","schoolCd":"0049005",
+       "housingType":"MONTHLY_RENT","sbizCd":[],"interestCategories":["주거"]}'
+```
+
+잘못된 값은 항목별 이유와 함께 400으로 돌려준다: `{"message":"입력값을 확인해 주세요.","errors":{"jobCd":"알 수 없는 코드: 0013010"}}`
 
 ## 테스트
 
@@ -86,6 +104,9 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `policy/Policy`, `PolicyRepository` | 공고 엔티티, "지금 신청 가능" 조회 |
 | `policy/Regions`, `Categories` | 시도 계산·전국 판정, 대분류 통일 규칙 |
 | `policy/PolicyController` | 목록·상세 API |
+| `profile/` | 사용자 프로필 엔티티·저장·검증, `/me` API |
+| `code/OntongCodes`, `CodeController` | 공식 코드정의서의 사용자 선택 코드와 이름, 선택지 API |
+| `common/ApiExceptionHandler` | 400 응답 형식 통일 |
 | `resources/db/migration/` | Flyway SQL. JPA는 `validate`만 한다 |
 
 ## 데이터 처리 규칙
@@ -121,6 +142,16 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 `교육･직업훈련`, `참여･기반`; 가운뎃점은 U+FF65)이 섞여 있고 한 정책에 여러 개가 콤마로 들어오기도 한다(`일자리,교육`
 49건). 공식 5개로 묶어 `category_group`에 저장하고 응답은 `categories` 목록으로 준다. 원본은 `category`에 남는다.
 
+### 사용자 프로필
+
+- 변수는 "조건 JSON 명세" v0.1을 따른다. 온통청년에 있는 조건은 온통청년 이름·코드 그대로(`zipCd`, `jobCd`, `schoolCd`,
+  `mrgSttsCd`, `plcyMajorCd`, `sbizCd`), 없는 것만 새 이름(`birthDate`→`age`, `annualIncome`, `householdMedianIncomePct`,
+  `housingType`, `homeowner`, `actualZipCd`).
+- 모든 항목은 선택이다. **비어 있음(null) = 아직 모름**이고 판정에서 "확인 필요"가 된다. 특화 대상 `sbizCd`는
+  `null`(모름)과 `[]`(해당 없음)을 구분해 저장한다(DB에는 NULL과 빈 문자열).
+- "제한없음" 코드(`0013010` 등)는 공고 쪽에서만 쓰는 값이라 사용자 값으로 받지 않는다.
+- 만 나이는 저장하지 않고 생년월일로 매번 계산한다(한국 시간 기준 오늘). 생일이 지나면 저절로 바뀐다.
+
 ### 알려진 원본 문제
 
 - 같은 공고가 다른 `plcyNo`로 두 번 등록된 경우가 있다(예: 전남광주 신혼부부 전세자금 대출이자 지원). 아직 합치지 않는다.
@@ -133,8 +164,9 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 - 중복 공고 정리, 공고 버전 이력(현재는 최신 값만 유지)
 
 **기능**
-- 사용자 프로필(WF01, WF08), 3값 판정 엔진(WF02, WF03) — 조건 형식은 "조건 JSON 명세" 문서 기준
-- 준비함·서류 체크리스트(WF05), 알림(WF07), 로그인과 관리자 권한
+- 3값 판정 엔진(WF02, WF03) — 조건 형식은 "조건 JSON 명세" 문서 기준
+- 프로필 항목 하나만 고치는 PATCH(WF03에서 부족한 정보 입력), 지역 선택용 시군구 목록 API
+- 준비함·서류 체크리스트(WF05), 알림(WF07), 로그인(현재 `X-Anonymous-Id` 임시)과 관리자 권한
 
 **운영**
 - 배포, CI, API 문서(Swagger)
