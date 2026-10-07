@@ -34,7 +34,9 @@ class ProfileApiIntegrationTest {
 				 "housingType":"MONTHLY_RENT","sbizCd":[],"interestCategories":["주거","일자리"]}
 				""";
 
-		mockMvc.perform(get("/api/v1/me/profile").header("X-Anonymous-Id", id)).andExpect(status().isNotFound());
+		mockMvc.perform(get("/api/v1/me/profile").header("X-Anonymous-Id", id))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.message").value("프로필이 아직 없습니다"));
 
 		mockMvc.perform(put("/api/v1/me/profile").header("X-Anonymous-Id", id)
 			.contentType(MediaType.APPLICATION_JSON)

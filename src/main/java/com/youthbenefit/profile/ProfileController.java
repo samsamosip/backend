@@ -43,8 +43,10 @@ public class ProfileController {
 	/** 내 데이터 삭제 (WF08). */
 	@DeleteMapping
 	public ResponseEntity<Void> delete(@RequestHeader(ANONYMOUS_ID) UUID anonymousId) {
-		return profileService.delete(anonymousId) ? ResponseEntity.noContent().build()
-				: ResponseEntity.notFound().build();
+		if (!profileService.delete(anonymousId)) {
+			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "프로필이 아직 없습니다");
+		}
+		return ResponseEntity.noContent().build();
 	}
 
 }
