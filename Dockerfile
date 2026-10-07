@@ -12,7 +12,8 @@ RUN --mount=type=cache,target=/root/.gradle \
 COPY src src
 RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew --no-daemon bootJar -x test && \
-    java -Djarmode=tools -jar build/libs/*.jar extract --layers --destination extracted
+    cp build/libs/*.jar application.jar && \
+    java -Djarmode=tools -jar application.jar extract --layers --destination extracted
 
 FROM eclipse-temurin:21-jre-jammy AS runtime
 
