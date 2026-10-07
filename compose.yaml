@@ -1,10 +1,42 @@
-# 로컬 개발용 DB. ./gradlew bootRun 하면 Spring이 자동으로 띄운다 (Docker 필요)
 services:
+  app:
+    image: '${APP_IMAGE:-youth-benefit-backend:local}'
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DOCKER_COMPOSE_ENABLED: 'false'
+      DB_URL: 'jdbc:postgresql://postgres:5432/${POSTGRES_DB:-youthbenefit}'
+      DB_USERNAME: '${POSTGRES_USER:-youthbenefit}'
+      DB_PASSWORD: '${POSTGRES_PASSWORD:-youthbenefit}'
+      ONTONG_API_KEY: '${ONTONG_API_KEY:-}'
+      ONTONG_SYNC_SCHEDULED: '${ONTONG_SYNC_SCHEDULED:-false}'
+    ports:
+      - '${APP_PORT:-8080}:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      org.springframework.boot.ignore: true
+    restart: unless-stopped
+
   postgres:
     image: 'postgres:17'
     environment:
-      - 'POSTGRES_DB=youthbenefit'
-      - 'POSTGRES_USER=youthbenefit'
-      - 'POSTGRES_PASSWORD=youthbenefit'
+      POSTGRES_DB: '${POSTGRES_DB:-youthbenefit}'
+      POSTGRES_USER: '${POSTGRES_USER:-youthbenefit}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-youthbenefit}'
     ports:
-      - '5432'
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

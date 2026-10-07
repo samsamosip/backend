@@ -14,7 +14,17 @@ Docker(Docker Desktop 또는 OrbStack)를 켠 뒤:
 
 ```bash
 cp .env.example .env          # ONTONG_API_KEY 설정
-./gradlew bootRun             # PostgreSQL 컨테이너가 자동으로 뜨고 Flyway가 테이블을 만든다
+docker compose up --build -d  # 애플리케이션과 PostgreSQL 실행
+docker compose logs -f app    # 시작 로그 확인
+```
+
+애플리케이션은 `http://localhost:8080`에서 실행된다. 종료할 때는 `docker compose down`을 사용한다.
+DB 데이터는 `postgres-data` 볼륨에 남으며, 데이터까지 지우려면 `docker compose down -v`를 사용한다.
+
+로컬 JVM에서 개발할 때는 다음처럼 실행한다. 이 경우 Spring Boot가 Compose의 PostgreSQL만 자동으로 띄운다.
+
+```bash
+./gradlew bootRun
 ```
 
 다른 터미널에서 첫 수집을 한다(약 10초, 3천여 건):
@@ -37,6 +47,25 @@ curl -X POST localhost:8080/api/v1/admin/ontong/sync
 | `HARVESTER_BASE_URL`, `HARVESTER_API_KEY` | (없음) | policy-harvester API. 관리자 화면 API key 메뉴에서 발급. **아직 코드에서 쓰지 않는다** |
 | `DOCKER_COMPOSE_ENABLED` | `true` | Docker 없이 직접 띄운 PostgreSQL을 쓸 때 `false` |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | 로컬 기본값 | `DOCKER_COMPOSE_ENABLED=false`일 때 쓰는 접속 정보 |
+| `APP_PORT`, `POSTGRES_PORT` | `8080`, `5432` | Compose에서 호스트에 공개할 포트 |
+| `APP_IMAGE` | `youth-benefit-backend:local` | Compose가 빌드하고 실행할 이미지 이름과 태그 |
+| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | `youthbenefit` | Compose PostgreSQL 및 앱 접속 정보 |
+
+### 이미지 빌드(CI)와 배포
+
+`.github/workflows/docker.yml`은 모든 push에서 테스트를 실행한 뒤 GHCR에 이미지를 발행한다.
+
+- 모든 브랜치: `ghcr.io/samsamosip/backend:sha-<커밋 앞 12자리>`
+- 기본 브랜치: 같은 이미지에 `ghcr.io/samsamosip/backend:latest` 태그 추가
+- 인증: workflow의 `GITHUB_TOKEN`을 사용하므로 별도 저장소 secret은 필요 없다.
+
+서버에서는 `.env`의 `APP_IMAGE`를 GHCR 이미지로 설정하고 Compose로 받는다. 패키지가 비공개라면 먼저
+`read:packages` 권한이 있는 토큰으로 `docker login ghcr.io`를 실행한다.
+
+```bash
+docker compose pull
+docker compose up -d --no-build
+```
 
 ## Public API
 
