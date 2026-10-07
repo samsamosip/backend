@@ -1,5 +1,6 @@
 package com.youthbenefit.policy;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+@Tag(name = "공고", description = "WF02 맞춤 홈, WF03 공고 상세")
 @RestController
 @RequestMapping("/api/v1/policies")
 @RequiredArgsConstructor

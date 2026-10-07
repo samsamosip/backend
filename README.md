@@ -34,6 +34,7 @@ curl -X POST localhost:8080/api/v1/admin/ontong/sync
 ```
 
 - 공고 목록: `http://localhost:8080/api/v1/policies?size=5`
+- **API 문서(Swagger)**: `http://localhost:8080/docs` — 모든 API의 요청·응답 모양을 보고 Try it out으로 바로 호출해 볼 수 있다
 - JDK 21이 없어도 Gradle toolchain이 자동으로 받는다. VS Code는 `.vscode/extensions.json`의 추천 확장을 설치한다.
 
 ## 설정
@@ -45,6 +46,7 @@ curl -X POST localhost:8080/api/v1/admin/ontong/sync
 | `ONTONG_API_KEY` | (없음) | 온통청년 오픈 API 인증키. youthcenter.go.kr 마이페이지에서 발급. 없으면 수집 API가 502 |
 | `ONTONG_SYNC_SCHEDULED` | `false` | `true`면 6시간마다 자동 수집(`ontong.sync.cron`, Asia/Seoul) |
 | `HARVESTER_BASE_URL`, `HARVESTER_API_KEY` | (없음) | policy-harvester API. 관리자 화면 API key 메뉴에서 발급. **아직 코드에서 쓰지 않는다** |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000` | API를 부를 수 있는 프론트 주소(콤마 구분). 배포하면 프론트 주소를 추가 |
 | `DOCKER_COMPOSE_ENABLED` | `true` | Docker 없이 직접 띄운 PostgreSQL을 쓸 때 `false` |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | 로컬 기본값 | `DOCKER_COMPOSE_ENABLED=false`일 때 쓰는 접속 정보 |
 | `APP_PORT`, `POSTGRES_PORT` | `8080`, `5432` | Compose에서 호스트에 공개할 포트 |
@@ -135,7 +137,8 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `policy/PolicyController` | 목록·상세 API |
 | `profile/` | 사용자 프로필 엔티티·저장·검증, `/me` API |
 | `code/OntongCodes`, `CodeController` | 공식 코드정의서의 사용자 선택 코드와 이름, 선택지 API |
-| `common/ApiExceptionHandler` | 400 응답 형식 통일 |
+| `common/ApiExceptionHandler` | 오류 응답 형식 통일 (`{message, errors}`) |
+| `common/WebConfig` | CORS 허용 주소, API 문서 제목 |
 | `resources/db/migration/` | Flyway SQL. JPA는 `validate`만 한다 |
 
 ## 데이터 처리 규칙
@@ -198,7 +201,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 - 준비함·서류 체크리스트(WF05), 알림(WF07), 로그인(현재 `X-Anonymous-Id` 임시)과 관리자 권한
 
 **운영**
-- 배포, CI, API 문서(Swagger)
+- 배포, CI
 
 ## 참고 자료
 

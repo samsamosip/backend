@@ -1,5 +1,6 @@
 package com.youthbenefit.ontong;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 수동 수집. TODO: 로그인 기능이 생기면 관리자만 호출하도록 막는다. */
+@Tag(name = "관리자", description = "온통청년 수집")
 @RestController
 @RequestMapping("/api/v1/admin/ontong")
 @RequiredArgsConstructor

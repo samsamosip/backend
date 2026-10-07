@@ -1,5 +1,6 @@
 package com.youthbenefit.code;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.youthbenefit.policy.Categories;
 import com.youthbenefit.profile.HousingType;
 import java.util.Arrays;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 온보딩(WF01)·내 정보(WF08) 화면의 선택지. 저장할 때는 code, 보여줄 때는 label 을 쓴다. */
+@Tag(name = "선택지", description = "온보딩 드롭다운 값")
 @RestController
 public class CodeController {
 
