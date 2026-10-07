@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: youth-benefit-backend
+  config:
+    # 프로젝트 루트의 .env 파일을 설정값으로 읽는다 (없어도 실행됨)
+    import: optional:file:.env[.properties]
+  docker:
+    compose:
+      enabled: ${DOCKER_COMPOSE_ENABLED:true}
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/youthbenefit}
+    username: ${DB_USERNAME:youthbenefit}
+    password: ${DB_PASSWORD:youthbenefit}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # 테이블은 Flyway(db/migration)로만 만든다
+
+ontong:
+  base-url: https://www.youthcenter.go.kr
+  api-key: ${ONTONG_API_KEY:}
+  page-size: 500           # 실측: 500건까지 한 번에 받아짐 → 약 7번 요청으로 전체 수집
+  sync:
+    scheduled: ${ONTONG_SYNC_SCHEDULED:false}
+    cron: "0 0 */6 * * *"  # 6시간마다

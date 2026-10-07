@@ -1,0 +1,10 @@
+# 로컬 개발용 DB. ./gradlew bootRun 하면 Spring이 자동으로 띄운다 (Docker 필요)
+services:
+  postgres:
+    image: 'postgres:17'
+    environment:
+      - 'POSTGRES_DB=youthbenefit'
+      - 'POSTGRES_USER=youthbenefit'
+      - 'POSTGRES_PASSWORD=youthbenefit'
+    ports:
+      - '5432'

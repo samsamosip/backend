@@ -1,0 +1,145 @@
+# Youth Benefit Backend
+
+청년혜택 길잡이의 Spring 백엔드다. 온통청년 청년정책 API 전체를 주기적으로 수집해 원본 그대로 보관하고,
+화면에 필요한 값(지역, 대분류)을 정리해 "지금 신청할 수 있는 공고" API로 제공한다. 앞으로 사용자 프로필,
+자격 판정(조건 일치 / 확인 필요 / 조건 불일치), 준비함, 알림을 이 서버에 붙인다.
+
+가장 중요한 원칙: **온통청년 필드는 이름과 코드값을 그대로 저장한다.** 화면용으로 계산한 값은 별도 칸에 두고
+원본은 바꾸지 않는다. 학교 장학 공고는 [policy-harvester](https://github.com/samsamosip/policy-harvester)가
+수집·구조화하고, 이 서버는 그 API를 받아 합친다(예정).
+
+## 빠른 시작
+
+Docker(Docker Desktop 또는 OrbStack)를 켠 뒤:
+
+```bash
+cp .env.example .env          # ONTONG_API_KEY 설정
+./gradlew bootRun             # PostgreSQL 컨테이너가 자동으로 뜨고 Flyway가 테이블을 만든다
+```
+
+다른 터미널에서 첫 수집을 한다(약 10초, 3천여 건):
+
+```bash
+curl -X POST localhost:8080/api/v1/admin/ontong/sync
+```
+
+- 공고 목록: `http://localhost:8080/api/v1/policies?size=5`
+- JDK 21이 없어도 Gradle toolchain이 자동으로 받는다. VS Code는 `.vscode/extensions.json`의 추천 확장을 설치한다.
+
+## 설정
+
+`.env`(비밀값 포함, git ignore 대상)에서 읽는다. 비밀값(API key)은 로그·문서·commit에 복사하지 않는다.
+
+| 키 | 기본값 | 비고 |
+|---|---|---|
+| `ONTONG_API_KEY` | (없음) | 온통청년 오픈 API 인증키. youthcenter.go.kr 마이페이지에서 발급. 없으면 수집 API가 502 |
+| `ONTONG_SYNC_SCHEDULED` | `false` | `true`면 6시간마다 자동 수집(`ontong.sync.cron`, Asia/Seoul) |
+| `HARVESTER_BASE_URL`, `HARVESTER_API_KEY` | (없음) | policy-harvester API. 관리자 화면 API key 메뉴에서 발급. **아직 코드에서 쓰지 않는다** |
+| `DOCKER_COMPOSE_ENABLED` | `true` | Docker 없이 직접 띄운 PostgreSQL을 쓸 때 `false` |
+| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | 로컬 기본값 | `DOCKER_COMPOSE_ENABLED=false`일 때 쓰는 접속 정보 |
+
+## Public API
+
+인증은 아직 없다. 수집 API(`/admin`)도 로그인 기능이 생기면 관리자만 호출하도록 막는다.
+
+| 경로 | 내용 |
+|---|---|
+| `GET /api/v1/policies?category=&page=&size=` | 지금 신청할 수 있는 공고. 마감 임박순, 마감일 없는(상시) 공고는 뒤로. `size` 최대 100 |
+| `GET /api/v1/policies/{id}` | 공고 상세. 자격 조건은 온통청년 코드 그대로(`jobCd`, `schoolCd` 등) |
+| `POST /api/v1/admin/ontong/sync` | 온통청년 전체 수집. 결과 `{fetched, created, updated, unchanged}` |
+
+`category`는 공식 대분류 5개 중 하나다: `일자리`, `주거`, `교육`, `복지문화`, `참여권리`.
+
+목록 응답 예:
+
+```json
+{
+  "id": 185,
+  "title": "2026년 고성형 청년 월세 지원사업",
+  "categories": ["주거"],
+  "organization": "강원특별자치도 고성군",
+  "applyPeriodCode": "0057001",
+  "applyStartDate": "2026-10-01",
+  "applyEndDate": "2026-10-16",
+  "nationwide": false,
+  "regions": ["강원"]
+}
+```
+
+## 테스트
+
+```bash
+./gradlew test
+```
+
+단위 테스트는 외부 호출 없이 돈다(MockRestServiceServer, 실제 API 응답으로 만든 fixture). DB 통합 테스트는
+Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너뛴다.
+
+## 코드 구조
+
+| 경로 | 역할 |
+|---|---|
+| `ontong/OntongApiClient` | API 호출. 500건씩 전체 페이지, 실패 시 2초·5초 뒤 재시도(최대 3번), 연결 10초·응답 60초 제한 |
+| `ontong/OntongPolicyMapper` | 원본 Map → `PolicyContent`. 공백 정리, 신청 기간 파싱, 지역·대분류 계산, 변경 감지 해시 |
+| `ontong/OntongSyncService` | 저장. 새 공고는 추가, 기존 공고는 해시가 바뀐 경우에만 갱신 |
+| `ontong/OntongSyncScheduler`, `OntongSyncController` | 정기 수집(선택), 수동 수집 API |
+| `policy/Policy`, `PolicyRepository` | 공고 엔티티, "지금 신청 가능" 조회 |
+| `policy/Regions`, `Categories` | 시도 계산·전국 판정, 대분류 통일 규칙 |
+| `policy/PolicyController` | 목록·상세 API |
+| `resources/db/migration/` | Flyway SQL. JPA는 `validate`만 한다 |
+
+## 데이터 처리 규칙
+
+### 저장과 변경 감지
+
+- `policies` 한 행 = 공고 한 건. `(source, source_id)`가 유일하다. 온통청년은 `source=ONTONG`, `source_id=plcyNo`.
+  학교 공고·사용자 등록 공고도 같은 테이블에 `SCHOOL`, `USER`로 넣는다.
+- API 응답 원본은 `raw_payload`(jsonb)에 그대로 둔다. `raw_hash`는 원본에서 **조회수(`inqCnt`)를 뺀** SHA-256이고,
+  이 값이 바뀐 공고만 다시 저장한다. 조회수까지 넣으면 하루 만에 3,235건 중 1,950건이 "수정"으로 잡혔다.
+- 마감(`aplyPrdSeCd=0057003`) 공고도 저장하고 조회에서 뺀다. 수집 단계에서 버리면 이미 저장된 공고가 나중에 마감으로
+  바뀐 것을 반영하지 못한다.
+
+### 온통청년 형식 정리 (2026-10 실측)
+
+| 원본 | 처리 |
+|---|---|
+| 빈 값이 공백 문자열(`"        "`)로 옴 | `null` |
+| 신청 기간 `20260101 ~ 20261231`, 드물게 여러 구간(`…\N20261201 ~ 20261231`, 2건) | 첫 시작일·마지막 마감일 |
+| 나이에 숫자가 아닌 값(4건) | `null`. `0`은 "제한 없음"이라 그대로 |
+| 신청기간 코드 | `0057001` 특정기간 · `0057002` 상시 · `0057003` 마감 (공식 코드정의서) |
+
+### 지역
+
+`zipCd`(시군구 코드 5자리 콤마 목록)의 앞 2자리가 시도다. 전국 정책도 "전국"이 아니라 시군구 코드를 전부 나열하고
+(정책당 238~256개), 실제로 쓰이는 시도는 16개다(전남 46·광주 29가 전남광주 `12`로 통합). 그래서 **16개 시도를 모두
+포함하면 전국**으로 본다(`nationwide`, 2026-10 기준 638건). 목록 응답은 `zipCd` 대신 `regions`(`["전국"]` 또는
+`["서울", "대전"]`)를 준다.
+
+### 대분류
+
+공식 코드정의서의 대분류는 일자리·주거·교육·복지문화·참여권리 5개인데, 실데이터에는 새 이름(`금융･복지･문화`,
+`교육･직업훈련`, `참여･기반`; 가운뎃점은 U+FF65)이 섞여 있고 한 정책에 여러 개가 콤마로 들어오기도 한다(`일자리,교육`
+49건). 공식 5개로 묶어 `category_group`에 저장하고 응답은 `categories` 목록으로 준다. 원본은 `category`에 남는다.
+
+### 알려진 원본 문제
+
+- 같은 공고가 다른 `plcyNo`로 두 번 등록된 경우가 있다(예: 전남광주 신혼부부 전세자금 대출이자 지원). 아직 합치지 않는다.
+- 주관 기관 지역과 신청 가능 지역이 다를 수 있다(은평구 행사인데 전국 대상). 지역 판정은 기관명이 아니라 `zipCd`로 한다.
+
+## 남은 작업
+
+**데이터**
+- policy-harvester 장학 데이터 합치기 (응답 형식 확정 후)
+- 중복 공고 정리, 공고 버전 이력(현재는 최신 값만 유지)
+
+**기능**
+- 사용자 프로필(WF01, WF08), 3값 판정 엔진(WF02, WF03) — 조건 형식은 "조건 JSON 명세" 문서 기준
+- 준비함·서류 체크리스트(WF05), 알림(WF07), 로그인과 관리자 권한
+
+**운영**
+- 배포, CI, API 문서(Swagger)
+
+## 참고 자료
+
+- [온통청년 오픈 API 제공목록·코드정의서](https://www.youthcenter.go.kr/cmnFooter/openapiIntro/oaiDoc)
+- [policy-harvester](https://github.com/samsamosip/policy-harvester)
