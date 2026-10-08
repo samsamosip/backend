@@ -82,6 +82,8 @@ docker compose up -d --no-build
 | `GET /api/v1/me/profile` | 내 프로필. 만 나이(`age`), 주민등록 시도(`residenceSido`), 아직 비어 있는 항목(`missingFields`) 포함. 없으면 404 |
 | `PUT /api/v1/me/profile` | 내 프로필 전체 저장. 보내지 않은 항목은 "모름"으로 비워진다 |
 | `DELETE /api/v1/me` | 내 데이터 삭제 |
+| `GET /api/v1/me/matches?category=&verdict=&includeNoMatch=&page=&size=` | 맞춤 공고(WF02). 신청 가능한 공고를 내 프로필로 판정. 기본은 조건 일치 + 확인 필요, 마감 임박순. `counts`는 전체 판정 건수 |
+| `GET /api/v1/policies/{id}/eligibility` | 공고 하나의 조건별 판정(WF03): 공고 요구사항, 내 값, 참/거짓/미확인, 근거, 채우면 다시 판정되는 항목 |
 
 `/me` 경로는 로그인이 생기기 전까지 `X-Anonymous-Id` 헤더(UUID)로 사람을 구분한다. 프론트가 처음 방문 때
 UUID를 만들어 localStorage에 두고 매 요청에 보낸다. 헤더가 없거나 UUID가 아니면 400.
@@ -137,6 +139,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `policy/PolicyController` | 목록·상세 API |
 | `profile/` | 사용자 프로필 엔티티·저장·검증, `/me` API |
 | `code/OntongCodes`, `CodeController` | 공식 코드정의서의 사용자 선택 코드와 이름, 선택지 API |
+| `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년 → 조건 변환, 맞춤 목록 API |
 | `common/ApiExceptionHandler` | 오류 응답 형식 통일 (`{message, errors}`) |
 | `common/WebConfig` | CORS 허용 주소, API 문서 제목 |
 | `resources/db/migration/` | Flyway SQL. JPA는 `validate`만 한다 |
@@ -184,6 +187,29 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 - "제한없음" 코드(`0013010` 등)는 공고 쪽에서만 쓰는 값이라 사용자 값으로 받지 않는다.
 - 만 나이는 저장하지 않고 생년월일로 매번 계산한다(한국 시간 기준 오늘). 생일이 지나면 저절로 바뀐다.
 
+### 자격 판정 (3값)
+
+LLM 없이 규칙으로 판정한다. 조건 하나는 **참 / 거짓 / 미확인**이고, AND는 하나라도 거짓이면 거짓·모두 참이면 참·그 외 미확인,
+OR는 하나라도 참이면 참·모두 거짓이면 거짓·그 외 미확인이다. 최종 결과가 참이면 **조건 일치**, 거짓이면 **조건 불일치**,
+미확인이면 **확인 필요**다. 확정 불일치가 하나라도 있으면 다른 조건을 몰라도 불일치다.
+
+온통청년 공고 → 조건(`eligibility/OntongConditions`):
+
+| 공고 칸 | 조건 | 비고 |
+|---|---|---|
+| `sprtTrgtMinAge`, `sprtTrgtMaxAge` | 만 나이(신청일=오늘 기준) 범위 | 0은 제한 없음, 최대 99 이상(99·100·120·999 실측)도 상한 없음("만 19세 이상"). `sprtTrgtAgeLmtYn`은 실측상 믿을 수 없어 쓰지 않는다(Y인데 나이가 있는 공고 673건) |
+| `zipCd` | 내 주민등록 시군구가 목록에 있는가 | 전국(16개 시도 포함)이면 조건 없음 |
+| `earnCndSeCd=0043002` + `earnMaxAmt` | 연소득 상한 | |
+| `earnCndSeCd=0043003` | 미확인(소득 조건) | 글로만 적힘 → AI 추출 전까지 확인 필요 |
+| `jobCd`, `schoolCd`, `mrgSttsCd`, `plcyMajorCd` | 내 코드가 목록에 있는가 | "제한없음" 코드가 있으면 조건 없음 |
+| `sbizCd` | 내 특화 대상 중 하나라도 목록에 있는가 | 모름(null)은 미확인, 해당 없음([])은 불일치 |
+| `addAplyQlfcCndCn` | 미확인(추가 자격 조건) | 원문을 근거로 보여준다 |
+| `ptcpPrpTrgtCn` | NOT 미확인(참여 제한 대상) | |
+
+해석하지 못한 조건이 남으면 다른 조건이 다 맞아도 조건 일치로 단정하지 않는다. 그래서 신청 가능한 공고의 약 40%(글로 된
+추가 자격 조건이 있는 공고)는 AI 추출이 붙기 전까지 확인 필요로 나온다. 프로필이 없으면(헤더 없음 포함) 빈 프로필로 판정해
+조건이 있는 공고는 모두 확인 필요가 된다. 실데이터 1,043건 판정에 약 0.1초.
+
 ### 알려진 원본 문제
 
 - 같은 공고가 다른 `plcyNo`로 두 번 등록된 경우가 있다(예: 전남광주 신혼부부 전세자금 대출이자 지원). 아직 합치지 않는다.
@@ -196,7 +222,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 - 중복 공고 정리, 공고 버전 이력(현재는 최신 값만 유지)
 
 **기능**
-- 3값 판정 엔진(WF02, WF03) — 조건 형식은 "조건 JSON 명세" 문서 기준
+- 글로 된 조건(`earnEtcCn`, `addAplyQlfcCndCn`, `ptcpPrpTrgtCn`)을 AI로 조건 나무로 바꾸기 — 판정 엔진은 같은 `Condition` 나무를 그대로 판정한다
 - 프로필 항목 하나만 고치는 PATCH(WF03에서 부족한 정보 입력), 지역 선택용 시군구 목록 API
 - 준비함·서류 체크리스트(WF05), 알림(WF07), 로그인(현재 `X-Anonymous-Id` 임시)과 관리자 권한
 
