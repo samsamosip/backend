@@ -1,5 +1,6 @@
 package com.youthbenefit.profile;
 
+import com.youthbenefit.application.ApplicationRepository;
 import com.youthbenefit.code.OntongCodes;
 import com.youthbenefit.common.InvalidRequestException;
 import com.youthbenefit.policy.Categories;
@@ -22,6 +23,8 @@ public class ProfileService {
 
 	private final UserProfileRepository repository;
 
+	private final ApplicationRepository applicationRepository;
+
 	@Transactional(readOnly = true)
 	public Optional<ProfileResponse> find(UUID anonymousId) {
 		return repository.findByAnonymousId(anonymousId).map(p -> ProfileResponse.from(p, today()));
@@ -37,12 +40,15 @@ public class ProfileService {
 		return ProfileResponse.from(profile, today());
 	}
 
+	/** 내 데이터 삭제: 프로필과 준비함 전부. 지울 게 하나도 없으면 false. */
 	@Transactional
 	public boolean delete(UUID anonymousId) {
-		return repository.findByAnonymousId(anonymousId).map(p -> {
+		long applications = applicationRepository.deleteByAnonymousId(anonymousId);
+		boolean profile = repository.findByAnonymousId(anonymousId).map(p -> {
 			repository.delete(p);
 			return true;
 		}).orElse(false);
+		return profile || applications > 0;
 	}
 
 	/** 온통청년 코드는 공식 코드정의서에 있는 값만 받는다 ("제한없음" 코드는 사용자 값이 아니라 거절). */

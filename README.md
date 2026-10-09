@@ -81,8 +81,14 @@ docker compose up -d --no-build
 | `GET /api/v1/codes` | 온보딩 선택지(`jobCd`, `schoolCd`, `mrgSttsCd`, `plcyMajorCd`, `sbizCd`, `housingType`, `interestCategories`)의 code·label |
 | `GET /api/v1/me/profile` | 내 프로필. 만 나이(`age`), 주민등록 시도(`residenceSido`), 아직 비어 있는 항목(`missingFields`) 포함. 없으면 404 |
 | `PUT /api/v1/me/profile` | 내 프로필 전체 저장. 보내지 않은 항목은 "모름"으로 비워진다 |
-| `DELETE /api/v1/me` | 내 데이터 삭제 |
+| `DELETE /api/v1/me` | 내 데이터 삭제 (프로필과 준비함) |
 | `GET /api/v1/me/matches?category=&verdict=&includeNoMatch=&page=&size=` | 맞춤 공고(WF02). 신청 가능한 공고를 내 프로필로 판정. 기본은 조건 일치 + 확인 필요, 마감 임박순. `counts`는 전체 판정 건수 |
+| `POST /api/v1/me/applications` | 준비함에 관심 저장(WF05). `{"policyId": 185}`. 공고 제출 서류로 체크리스트를 만든다. 이미 있으면 200 |
+| `GET /api/v1/me/applications` | 준비함 목록. 카드마다 상태, 마감 D-day, 준비율 |
+| `GET /api/v1/me/applications/{id}` | 준비함 상세. 체크리스트, 제출 서류 원문, 신청 링크 |
+| `PATCH /api/v1/me/applications/{id}` | 상태 변경 `{"status": "PREPARING"}` (INTERESTED / PREPARING / APPLIED) |
+| `DELETE /api/v1/me/applications/{id}` | 관심 해제 |
+| `POST`·`PATCH`·`DELETE /api/v1/me/applications/{id}/items[/{itemId}]` | 서류 추가 `{"content"}` · 체크 `{"checked": true}`·이름 수정 · 삭제 |
 | `GET /api/v1/policies/{id}/eligibility` | 공고 하나의 조건별 판정(WF03): 공고 요구사항, 내 값, 참/거짓/미확인, 근거, 채우면 다시 판정되는 항목 |
 
 `/me` 경로는 로그인이 생기기 전까지 `X-Anonymous-Id` 헤더(UUID)로 사람을 구분한다. 프론트가 처음 방문 때
@@ -139,6 +145,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `policy/PolicyController` | 목록·상세 API |
 | `profile/` | 사용자 프로필 엔티티·저장·검증, `/me` API |
 | `code/OntongCodes`, `CodeController` | 공식 코드정의서의 사용자 선택 코드와 이름, 선택지 API |
+| `application/` | 준비함: 관심 저장, 상태, 서류 체크리스트, 제출 서류 글 → 항목 쪼개기 |
 | `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년 → 조건 변환, 맞춤 목록 API |
 | `common/ApiExceptionHandler` | 오류 응답 형식 통일 (`{message, errors}`) |
 | `common/WebConfig` | CORS 허용 주소, API 문서 제목 |
@@ -210,6 +217,16 @@ OR는 하나라도 참이면 참·모두 거짓이면 거짓·그 외 미확인�
 추가 자격 조건이 있는 공고)는 AI 추출이 붙기 전까지 확인 필요로 나온다. 프로필이 없으면(헤더 없음 포함) 빈 프로필로 판정해
 조건이 있는 공고는 모두 확인 필요가 된다. 실데이터 1,043건 판정에 약 0.1초.
 
+### 준비함과 서류 체크리스트
+
+- 관심 저장할 때 온통청년 제출 서류 글(`sbmsnDcmntCn`)을 체크리스트로 쪼갠다(`application/DocumentListParser`). 줄 단위로 나누고,
+  번호 없는 줄은 괄호 밖 쉼표로 다시 나눈다. `※`·`☞` 안내문, "붙임파일 확인"·"별도 문의" 같은 안내, `○ 공통` 같은 소제목,
+  콜론 뒤 설명("주민등록초본(최근 5년): 행정정보…")은 뺀다. `[선택]`, `(해당자만)`, "해당자에 한함 :"은 선택 서류로 표시한다.
+- 실측: 제출 서류가 적힌 공고 1,029건 중 758건(74%)에서 항목이 나온다. 나머지는 대부분 "붙임파일 확인"이라 빈 목록이고,
+  사용자가 직접 서류를 추가한다. 상세 응답은 원문(`submissionDocumentsRaw`)도 함께 준다.
+- 체크리스트를 다 채워도 제출 완료가 아니다. 신청 완료(`APPLIED`)는 실제 제출 후 사용자가 직접 표시한다(기획안 7쪽).
+- 다른 사람의 준비함은 404로 보인다. `DELETE /api/v1/me`는 준비함도 지운다.
+
 ### 알려진 원본 문제
 
 - 같은 공고가 다른 `plcyNo`로 두 번 등록된 경우가 있다(예: 전남광주 신혼부부 전세자금 대출이자 지원). 아직 합치지 않는다.
@@ -224,7 +241,7 @@ OR는 하나라도 참이면 참·모두 거짓이면 거짓·그 외 미확인�
 **기능**
 - 글로 된 조건(`earnEtcCn`, `addAplyQlfcCndCn`, `ptcpPrpTrgtCn`)을 AI로 조건 나무로 바꾸기 — 판정 엔진은 같은 `Condition` 나무를 그대로 판정한다
 - 프로필 항목 하나만 고치는 PATCH(WF03에서 부족한 정보 입력), 지역 선택용 시군구 목록 API
-- 준비함·서류 체크리스트(WF05), 알림(WF07), 로그인(현재 `X-Anonymous-Id` 임시)과 관리자 권한
+- 서류 마감·발급일 제한 같은 복수 일정(WF05), 알림(WF07), 로그인(현재 `X-Anonymous-Id` 임시)과 관리자 권한
 
 **운영**
 - 배포, CI

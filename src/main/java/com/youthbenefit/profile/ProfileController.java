@@ -46,8 +46,8 @@ public class ProfileController {
 		return profileService.save(anonymousId, request);
 	}
 
-	/** 내 데이터 삭제 (WF08). */
-	@Operation(summary = "내 데이터 삭제")
+	/** 내 데이터 삭제 (WF08): 프로필과 준비함. */
+	@Operation(summary = "내 데이터 삭제", description = "프로필과 준비함을 모두 지운다")
 	@DeleteMapping
 	public ResponseEntity<Void> delete(@Parameter(description = "브라우저가 처음 방문 때 만든 UUID (localStorage 보관)", example = "6f1c2b7e-1d1a-4c55-9a6b-0d6a3a1e2f00") @RequestHeader(ANONYMOUS_ID) UUID anonymousId) {
 		if (!profileService.delete(anonymousId)) {
