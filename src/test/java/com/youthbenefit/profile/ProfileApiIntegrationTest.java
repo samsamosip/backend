@@ -67,6 +67,12 @@ class ProfileApiIntegrationTest {
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.errors.jobCd").exists());
 
+		mockMvc.perform(put("/api/v1/me/profile").header("X-Anonymous-Id", UUID.randomUUID().toString())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"birthDate\":\"2003/06/12\",\"housingType\":\"HOUSE\"}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.errors.birthDate").value("날짜는 YYYY-MM-DD 형식이어야 합니다"));
+
 		mockMvc.perform(get("/api/v1/me/profile")).andExpect(status().isBadRequest());
 		mockMvc.perform(get("/api/v1/me/profile").header("X-Anonymous-Id", "not-a-uuid"))
 			.andExpect(status().isBadRequest());
