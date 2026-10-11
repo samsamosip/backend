@@ -84,7 +84,11 @@ public class Policy {
 	/** 공식 대분류 5개로 묶은 값, 콤마 목록. {@link Categories} 참고 */
 	private String categoryGroup;
 
+	/** 제목과 주관기관으로 만든 중복 판별 키. {@link Duplicates} 참고 */
+	private String duplicateKey;
+
 	private LocalDateTime sourceModifiedAt;
+	private LocalDateTime sourceRegisteredAt;
 	private String rawHash;
 
 	@JdbcTypeCode(SqlTypes.JSON)
@@ -140,11 +144,13 @@ public class Policy {
 		screeningMethod = c.screeningMethod();
 		submissionDocuments = c.submissionDocuments();
 		sourceModifiedAt = c.sourceModifiedAt();
+		sourceRegisteredAt = c.sourceRegisteredAt();
 		rawHash = c.rawHash();
 		rawPayload = c.rawPayload();
 		sidoCodes = c.sidoCodes();
 		nationwide = c.nationwide();
 		categoryGroup = c.categoryGroup();
+		duplicateKey = c.duplicateKey();
 		return true;
 	}
 

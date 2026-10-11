@@ -38,9 +38,11 @@ public record PolicyContent(
 		String screeningMethod,
 		String submissionDocuments,
 		LocalDateTime sourceModifiedAt,
+		LocalDateTime sourceRegisteredAt,
 		String rawHash,
 		String rawPayload,
 		String sidoCodes,
 		boolean nationwide,
-		String categoryGroup) {
+		String categoryGroup,
+		String duplicateKey) {
 }

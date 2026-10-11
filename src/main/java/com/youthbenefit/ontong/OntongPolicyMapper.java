@@ -1,6 +1,7 @@
 package com.youthbenefit.ontong;
 
 import com.youthbenefit.policy.Categories;
+import com.youthbenefit.policy.Duplicates;
 import com.youthbenefit.policy.PolicyContent;
 import com.youthbenefit.policy.Regions;
 import java.nio.charset.StandardCharsets;
@@ -86,11 +87,13 @@ public class OntongPolicyMapper {
 				text(item, "srngMthdCn"),
 				text(item, "sbmsnDcmntCn"),
 				dateTime(text(item, "lastMdfcnDt")),
+				dateTime(text(item, "frstRegDt")),
 				sha256(jsonMapper.writeValueAsString(withoutVolatileFields(item))),
 				rawPayload,
 				sidoCodes.isEmpty() ? null : String.join(",", sidoCodes),
 				Regions.isNationwide(sidoCodes),
-				categories.isEmpty() ? null : String.join(",", categories));
+				categories.isEmpty() ? null : String.join(",", categories),
+				Duplicates.key(text(item, "plcyNm"), text(item, "sprvsnInstCdNm")));
 	}
 
 	private static Map<String, Object> withoutVolatileFields(Map<String, Object> item) {
