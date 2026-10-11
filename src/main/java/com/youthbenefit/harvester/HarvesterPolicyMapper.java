@@ -99,6 +99,12 @@ public class HarvesterPolicyMapper {
 				documentsJson(d.path("required_documents")));
 	}
 
+	/** 상세의 학년도. 없으면 null. */
+	public Integer academicYear(String detailJson) {
+		JsonNode year = jsonMapper.readTree(detailJson).path("academic_year");
+		return year.isNumber() ? year.intValue() : null;
+	}
+
 	/**
 	 * 온통청년 신청기간 코드에 맞춘다(목록 조회가 이 코드와 마감일로 거른다). 끝난 상태는 마감, 날짜가 있으면 특정기간, 없으면 상시.
 	 * 상태를 모르는데(unknown) 마감일도 없으면 오래된 공고일 수 있어 마감으로 둔다.

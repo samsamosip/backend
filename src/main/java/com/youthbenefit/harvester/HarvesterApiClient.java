@@ -23,6 +23,8 @@ public class HarvesterApiClient {
 
 	private static final int PAGE_SIZE = 100;
 
+	private static final int CHANGES_PAGE_SIZE = 500;
+
 	private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() {
 	};
 
@@ -80,6 +82,26 @@ public class HarvesterApiClient {
 		}
 		while (cursor != null && !cursor.isBlank());
 		return all;
+	}
+
+	/** 변경 목록 한 쪽. items 는 event_seq 순서, nextCursor 는 마지막으로 받은 event_seq (없으면 보낸 cursor 그대로). */
+	public record ChangesPage(List<Map<String, Object>> items, String nextCursor) {
+	}
+
+	/** cursor 다음에 생긴 변경(생성·수정·합쳐짐·비공개 등). */
+	public ChangesPage changes(String cursor) {
+		checkConfigured();
+		String body = request("변경 목록", () -> restClient.get()
+			.uri(uri -> uri.path("/v1/changes").queryParam("cursor", cursor).queryParam("limit", CHANGES_PAGE_SIZE).build())
+			.retrieve()
+			.body(String.class));
+		JsonNode page = jsonMapper.readTree(body);
+		List<Map<String, Object>> items = new ArrayList<>();
+		for (JsonNode item : page.path("items")) {
+			items.add(jsonMapper.convertValue(item, MAP));
+		}
+		JsonNode next = page.path("next_cursor");
+		return new ChangesPage(items, next.isMissingNode() || next.isNull() ? cursor : next.asString());
 	}
 
 	/** 공고 하나의 상세 (자격·기간·서류). 원본 JSON 문자열 그대로 돌려준다. */

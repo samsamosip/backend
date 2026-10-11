@@ -95,6 +95,9 @@ public class Policy {
 	@Column(columnDefinition = "jsonb")
 	private String checklistDocuments;
 
+	/** 출처에서 사라짐(합쳐짐·비공개·삭제). 목록·맞춤에서 빠진다 */
+	private boolean sourceRemoved;
+
 	private LocalDateTime sourceModifiedAt;
 	private LocalDateTime sourceRegisteredAt;
 	private String rawHash;
@@ -163,6 +166,20 @@ public class Policy {
 		sourceVersion = c.sourceVersion();
 		checklistDocuments = c.checklistDocuments();
 		return true;
+	}
+
+	/** 출처에서 사라졌다고 표시한다. 이미 표시돼 있으면 false. */
+	public boolean markRemoved() {
+		if (sourceRemoved) {
+			return false;
+		}
+		sourceRemoved = true;
+		return true;
+	}
+
+	/** 출처에 다시 나타났다. */
+	public void markRestored() {
+		sourceRemoved = false;
 	}
 
 	@PrePersist

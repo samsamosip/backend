@@ -33,7 +33,8 @@ DB 데이터는 `postgres-data` 볼륨에 남으며, 데이터까지 지우려�
 curl -X POST localhost:8080/api/v1/admin/ontong/sync
 ```
 
-학교 장학도 받으려면(`.env`에 `HARVESTER_*` 필요). 처음에는 상세 요청 한도 때문에 30분 넘게 걸린다(이후엔 바뀐 것만 받아 빠름):
+학교 장학도 받으려면(`.env`에 `HARVESTER_*` 필요). 빈 DB에서 처음 받을 때는 상세 요청 한도 때문에 30분 넘게 걸리고,
+그다음부터는 Harvester 변경 목록에서 바뀐 것만 받아 1초 안쪽이다. 목록 전체와 다시 비교하려면 `?full=true`:
 
 ```bash
 curl -X POST localhost:8080/api/v1/admin/harvester/sync
@@ -85,7 +86,7 @@ docker compose up -d --no-build
 | `GET /api/v1/policies?category=&page=&size=` | 지금 신청할 수 있는 공고. 마감 임박순, 마감일 없는(상시) 공고는 뒤로. `size` 최대 100 |
 | `GET /api/v1/policies/{id}` | 공고 상세. 자격 조건은 온통청년 코드 그대로(`jobCd`, `schoolCd` 등) |
 | `POST /api/v1/admin/ontong/sync` | 온통청년 전체 수집. 결과 `{fetched, created, updated, unchanged}` |
-| `POST /api/v1/admin/harvester/sync` | 학교 장학 수집. 결과 `{listed, skippedOld, fetched, created, updated, unchanged, failed}` |
+| `POST /api/v1/admin/harvester/sync` | 학교 장학 수집(`?full=true`면 목록 전체 비교). 결과 `{mode, seen, skippedOld, fetched, created, updated, unchanged, removed, failed}` |
 | `GET /api/v1/codes` | 온보딩 선택지(`jobCd`, `schoolCd`, `mrgSttsCd`, `plcyMajorCd`, `sbizCd`, `housingType`, `interestCategories`, 학교용 `enrollmentStatus`, `gpaScale`, `kosafIncomeBracket`)의 code·label |
 | `GET /api/v1/regions` | 지역 선택지: 시도 16개와 각 시군구 `{code, name, sigungu: [{code, label}]}`. 프로필 `zipCd`에는 시군구 code(5자리)를 저장 |
 | `GET /api/v1/me/profile` | 내 프로필. 만 나이(`age`), 주민등록 시도(`residenceSido`), 아직 비어 있는 항목(`missingFields`) 포함. 없으면 404 |
@@ -150,7 +151,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `ontong/OntongPolicyMapper` | 원본 Map → `PolicyContent`. 공백 정리, 신청 기간 파싱, 지역·대분류 계산, 변경 감지 해시 |
 | `ontong/OntongSyncService` | 저장. 새 공고는 추가, 기존 공고는 해시가 바뀐 경우에만 갱신 |
 | `ontong/OntongSyncScheduler`, `OntongSyncController` | 정기 수집(선택), 수동 수집 API |
-| `harvester/` | 학교 장학(policy-harvester) 수집: API 호출(429면 `Retry-After`만큼 대기), 상세 → `PolicyContent`, 바뀐 것만 상세 요청 |
+| `harvester/` | 학교 장학(policy-harvester) 수집: API 호출(429면 `Retry-After`만큼 대기), 상세 → `PolicyContent`, 변경 목록으로 바뀐 것만 받기, 읽은 위치(`SyncCursor`) |
 | `policy/Policy`, `PolicyRepository` | 공고 엔티티, "지금 신청 가능" 조회 |
 | `policy/Regions`, `Categories` | 시도·시군구 이름표, 전국 판정, 옛 코드 → 새 코드, 거주지 이름 → 코드, 대분류 통일 규칙 |
 | `policy/PolicyController` | 목록·상세 API |
@@ -258,9 +259,16 @@ unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정�
 
 ### 학교 장학 수집
 
-- 목록(`/v1/opportunities`)은 요약만 주고 자격·기간·서류는 상세에 있다. 상세는 키당 분당 약 60회 제한이라 필요한 것만 받는다:
-  처음 보는 공고, `version_id`가 바뀐 공고, 아직 마감 안 된 공고. 처음 보는 공고 중 지난 학년도보다 이전 것(2026년이면 2024학년도
-  이하)은 이미 끝난 장학이라 받지 않는다. 실측(2026-10-11): 목록 1,630건 중 872건 건너뜀, 상세 758건(처음 약 35분), 신청 가능 15건.
+- 목록(`/v1/opportunities`)은 요약만 주고 자격·기간·서류는 상세에 있다. 상세는 키당 분당 요청 한도가 있어서 필요한 것만 받는다.
+- **처음(읽은 위치 없음)이나 `?full=true`**: 목록 전체를 보고 처음 보는 공고·`version_id`가 바뀐 공고의 상세를 받는다. 처음 보는 공고 중
+  지난 학년도보다 이전 것(2026년이면 2024학년도 이하)은 이미 끝난 장학이라 받지 않는다. 목록에서 빠진 공고는 사라짐(`source_removed`)으로
+  표시한다. 끝나면 변경 목록의 마지막 위치(`event_seq`)를 `sync_cursors`에 저장한다.
+- **그다음부터**: 변경 목록(`/v1/changes`)에서 저장한 위치 뒤의 변경만 본다. 한 공고에 변경이 여러 번이면 마지막 것만 처리한다.
+  `visible_after=false`(합쳐짐·비공개·삭제)면 사라짐으로 표시하고, 새로 생기거나 버전이 바뀐 공고만 상세를 받는다. 다시 공개되면 되살린다.
+  상세 받기가 실패하면 그 앞까지만 위치를 저장해 다음 수집 때 이어서 받는다.
+- 사라짐으로 표시한 공고는 지우지 않는다. 목록·맞춤에서만 빠지고, 준비함에 담긴 공고의 상세는 계속 열린다.
+- 실측(2026-10-12): 빈 DB 첫 수집은 목록 1,630건 중 872건 건너뜀, 상세 758건(약 35분). 이미 받아 둔 상태에서 전체 비교 12초, 변경만 0.25초.
+  신청 가능 15건.
 - 신청 기간은 `application_windows` 중 신청(application·additional_application)의 가장 이른 시작일~가장 늦은 마감일.
   상태가 closed·cancelled 등이면 마감, 날짜가 있으면 특정기간, 없으면 상시로 온통청년 신청기간 코드에 맞춘다(목록 조회가 같은 규칙).
 - 대분류는 `교육`, 원본 분류는 `장학금`. 거주지 조건이 시도 이름이면 화면 지역에도 쓴다.

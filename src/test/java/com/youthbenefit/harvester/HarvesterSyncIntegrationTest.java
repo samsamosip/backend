@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.youthbenefit.TestcontainersConfiguration;
+import com.youthbenefit.harvester.HarvesterSyncResult.Mode;
 import com.youthbenefit.application.ApplicationRepository;
 import com.youthbenefit.policy.Policy;
 import com.youthbenefit.policy.PolicyRepository;
@@ -55,13 +56,18 @@ class HarvesterSyncIntegrationTest {
 	ApplicationRepository applicationRepository;
 
 	@Autowired
+	SyncCursorRepository cursorRepository;
+
+	@Autowired
 	MockMvc mockMvc;
+
+	private String detail;
 
 	@BeforeEach
 	void setUp() throws Exception {
 		applicationRepository.deleteAll();
 		policyRepository.deleteAll();
-		String detail;
+		cursorRepository.deleteAll();
 		try (InputStream in = getClass().getResourceAsStream("/fixtures/harvester-detail.json")) {
 			detail = new String(in.readAllBytes(), StandardCharsets.UTF_8);
 		}
@@ -71,19 +77,75 @@ class HarvesterSyncIntegrationTest {
 				Map.of("opportunity_id", OPEN_ID, "version_id", "v2", "academic_year", LocalDate.now().getYear()),
 				Map.of("opportunity_id", OLD_ID, "version_id", "v1", "academic_year", 2021)));
 		given(apiClient.detail(OPEN_ID)).willReturn(detail);
+		// 변경 목록에는 지금까지 이벤트 1개가 있다
+		given(apiClient.changes("0")).willReturn(page("1", event(1, OPEN_ID, "v2", true)));
+		given(apiClient.changes("1")).willReturn(page("1"));
+	}
+
+	private static HarvesterApiClient.ChangesPage page(String next, Map<String, Object>... events) {
+		return new HarvesterApiClient.ChangesPage(List.of(events), next);
+	}
+
+	private static Map<String, Object> event(int seq, String id, String version, boolean visible) {
+		return Map.of("event_seq", seq, "opportunity_id", id, "opportunity_version_id", version, "visible_after", visible);
+	}
+
+	private long openScholarships() {
+		return policyRepository.findOpenByCategory(LocalDate.now(), "교육", org.springframework.data.domain.Pageable.unpaged())
+			.getTotalElements();
 	}
 
 	@Test
-	void syncSkipsOldYearsAndRefetchesOnlyOpenOnes() {
+	void firstSyncIsFullThenOnlyChanges() {
 		HarvesterSyncResult first = syncService.sync();
-		HarvesterSyncResult second = syncService.sync();
+		assertThat(first).isEqualTo(new HarvesterSyncResult(Mode.FULL, 2, 1, 1, 1, 0, 0, 0, 0));
+		assertThat(cursorRepository.findById(HarvesterSyncService.CURSOR_NAME)).get()
+			.extracting(SyncCursor::getValue)
+			.isEqualTo("1");
 
-		assertThat(first).isEqualTo(new HarvesterSyncResult(2, 1, 1, 1, 0, 0, 0));
-		// 아직 신청 가능한 공고는 상태가 바뀔 수 있어 다시 받지만 내용이 같으면 그대로
-		assertThat(second).isEqualTo(new HarvesterSyncResult(2, 1, 1, 0, 0, 1, 0));
+		// 변경이 없으면 목록도 상세도 다시 받지 않는다
+		HarvesterSyncResult second = syncService.sync();
+		assertThat(second).isEqualTo(new HarvesterSyncResult(Mode.CHANGES, 0, 0, 0, 0, 0, 0, 0, 0));
+		verify(apiClient, times(1)).listAll();
+		verify(apiClient, times(1)).detail(OPEN_ID);
 		verify(apiClient, never()).detail(OLD_ID);
-		verify(apiClient, times(2)).detail(OPEN_ID);
-		assertThat(policyRepository.count()).isEqualTo(1);
+
+		// 합쳐짐 → 사라짐 표시, 목록에서 빠짐
+		given(apiClient.changes("1")).willReturn(page("2", event(2, OPEN_ID, "v2", false)));
+		given(apiClient.changes("2")).willReturn(page("2"));
+		assertThat(syncService.sync().removed()).isEqualTo(1);
+		assertThat(openScholarships()).isZero();
+
+		// 다시 공개 → 상세를 받아 되살림
+		given(apiClient.changes("2")).willReturn(page("3", event(3, OPEN_ID, "v3", true)));
+		given(apiClient.changes("3")).willReturn(page("3"));
+		HarvesterSyncResult restored = syncService.sync();
+		assertThat(restored.updated()).isEqualTo(1);
+		assertThat(openScholarships()).isEqualTo(1);
+		assertThat(policyRepository.findAll()).singleElement().extracting(Policy::getSourceVersion).isEqualTo("v3");
+	}
+
+	@Test
+	void failedDetailKeepsCursorSoNextSyncRetries() {
+		syncService.sync();
+		String newId = "33333333-3333-4333-8333-333333333333";
+		given(apiClient.changes("1")).willReturn(page("2", event(2, newId, "v1", true)));
+		given(apiClient.changes("2")).willReturn(page("2"));
+		given(apiClient.detail(newId)).willThrow(new HarvesterApiException("429 계속"));
+
+		assertThat(syncService.sync().failed()).isEqualTo(1);
+		assertThat(cursorRepository.findById(HarvesterSyncService.CURSOR_NAME)).get()
+			.extracting(SyncCursor::getValue)
+			.isEqualTo("1");
+	}
+
+	@Test
+	void fullSyncMarksScholarshipsMissingFromTheListAsRemoved() {
+		syncService.sync();
+		given(apiClient.listAll()).willReturn(List.of());
+
+		assertThat(syncService.syncFull().removed()).isEqualTo(1);
+		assertThat(openScholarships()).isZero();
 	}
 
 	@Test
