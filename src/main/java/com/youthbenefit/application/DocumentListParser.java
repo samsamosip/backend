@@ -18,18 +18,39 @@ public final class DocumentListParser {
 
 	private static final int MAX_NAME = 80;
 
-	/** 줄 앞 번호·기호: ① 1. 1) - ㅇ ○ □ ■ • · ▶ 등 */
-	private static final Pattern LEADING_MARK = Pattern
-		.compile("^\\s*(?:[\\u2460-\\u2473\\u2776-\\u277F]|\\d{1,2}[.)]|[-ㅇ○□■•·▶◦●*]|\\(\\d{1,2}\\))\\s*");
+	/** 줄 앞 번호·기호: ① 1. 1) 가. 나) - ㅇ ○ □ ■ • · ▶ 등 */
+	private static final Pattern LEADING_MARK = Pattern.compile(
+			"^\\s*(?:[\\u2460-\\u2473\\u2776-\\u277F]|\\d{1,2}[.)]|[가나다라마바사아자차카타파하][.)]|[-ㅇ○□■•·▶◦●*]|\\(\\d{1,2}\\))\\s*");
 
-	private static final Pattern NUMBERED = Pattern.compile("^\\s*(?:[\\u2460-\\u2473\\u2776-\\u277F]|\\d{1,2}[.)]|\\(\\d{1,2}\\))");
+	private static final Pattern NUMBERED = Pattern
+		.compile("^\\s*(?:[\\u2460-\\u2473\\u2776-\\u277F]|\\d{1,2}[.)]|[가나다라마바사아자차카타파하][.)]|\\(\\d{1,2}\\))");
+
+	/** "가) 일반근로자" 처럼 글자 번호로 시작하는 소제목인지 보려고 따로 둔다 */
+	private static final Pattern LETTER_MARK = Pattern.compile("^\\s*[가나다라마바사아자차카타파하][.)]");
+
+	/** 서류 이름은 보통 이런 글자로 끝난다 (신청서, 신분증, 등본, 증빙서류, 통장, 성적표, 여권, 1부 ...) */
+	private static final Pattern DOCUMENT_ENDING = Pattern.compile("(서|증|본|류|장|표|권|부|원|록|자료|사진|파일)$");
+
+	/** 서류 목록의 소제목: "신청인 제출 서류", "공통서류", "취창업자 추가서류", "제출 서류 목록" */
+	private static final Pattern SECTION_HEADER = Pattern
+		.compile("(제출|추가|공통|신청|구비|필요|필수)\\s*서류(\\s*목록)?$|서류\\s*목록$");
+
+	/** 서류가 아니라 설명 문장으로 끝나는 경우 (괄호 설명을 뗀 뒤 검사): "~ 작성 가능", "~ 경우", "담당자 확인필요" */
+	private static final Pattern SENTENCE_ENDING = Pattern
+		.compile("(작성|가능|불가|인정|지참|업로드|확인|포함|안내|불필요|필요|경우|없음|예정|한함|따름|\\s시|택\\s?\\d)$");
 
 	/** "[필수]", "(공통)" 같은 괄호 머리말, 또는 "필수 :", "해당자에 한함 :" 같은 콜론 머리말 */
 	private static final Pattern TAG_PREFIX = Pattern.compile(
 			"^\\s*(?:[\\[(]\\s*(필수|선택|공통|해당자[^\\])]*)\\s*[\\])]|(필수|선택|공통|해당자[가-힣 ]{0,8}?)\\s*[:：])\\s*");
 
+	/** "재학증명서, 재직증명서, 사업자등록증 중 택 1" → 마지막 이름에서 "중 택 1" 을 뗀다 */
+	private static final Pattern CHOOSE_ONE = Pattern.compile("\\s*중\\s*택\\s*\\d$");
+
+	/** 문장 끝의 "제출"·"첨부"는 떼고 서류 이름만 남긴다: "본인-대리인 관계 증명 서류 제출" */
+	private static final Pattern TRAILING_VERB = Pattern.compile("\\s*(제출|첨부)$");
+
 	private static final List<String> NOTE_WORDS = List.of("붙임", "첨부", "자세한", "홈페이지", "참고", "http", "문의",
-			"별도", "공고문", "확인하시기", "바랍니다", "부탁드립니다", "참조", "따름", "따라", "안내");
+			"별도", "공고문", "확인하시기", "바랍니다", "부탁드립니다", "참조", "따름", "따라", "안내", "아래 ", "다음 중");
 
 	/** 한 줄 안에 이어 쓴 ①②③ 앞에서 나눈다 */
 	private static final Pattern INLINE_CIRCLED = Pattern.compile("(?<=\\S)\\s*(?=[\\u2460-\\u2473\\u2776-\\u277F])");
@@ -45,7 +66,11 @@ public final class DocumentListParser {
 			return List.of();
 		}
 		Map<String, Document> out = new LinkedHashMap<>();
-		for (String rawLine : raw.split("\\R")) {
+		for (String rawLine : joinWrappedLines(unescapeHtml(raw).split("\\R"))) {
+			// 안내문 안의 ①② 는 서류 번호가 아니다: "※ 파일을 묶어서 제출(①,②한글파일, ③PDF파일)"
+			if (isNote(rawLine.strip())) {
+				continue;
+			}
 			for (String piece : INLINE_CIRCLED.split(rawLine)) {
 				addLine(out, piece);
 			}
@@ -53,21 +78,74 @@ public final class DocumentListParser {
 		return new ArrayList<>(out.values());
 	}
 
+	/** 원문에 HTML 기호가 그대로 들어 있는 경우가 있다: &apos;25~26 지방세 ... */
+	private static String unescapeHtml(String raw) {
+		return raw.replace("&lt;", "<")
+			.replace("&gt;", ">")
+			.replace("&apos;", "'")
+			.replace("&#39;", "'")
+			.replace("&quot;", "\"")
+			.replace("&amp;", "&");
+	}
+
+	/**
+	 * ①②③ 을 한 줄에 이어 쓴 목록이 중간에서 줄바꿈된 경우 다음 줄을 앞 줄에 붙인다: "⑧주민등록\n초본(최근 5년)" → "⑧주민등록초본(최근 5년)".
+	 * 다음 줄이 번호·기호로 시작하면 새 항목이라 붙이지 않는다.
+	 */
+	private static List<String> joinWrappedLines(String[] lines) {
+		List<String> joined = new ArrayList<>();
+		for (String line : lines) {
+			if (!joined.isEmpty() && inlineCircledList(joined.getLast()) && !line.isBlank() && !startsWithMark(line)) {
+				joined.set(joined.size() - 1, joined.getLast().stripTrailing() + line.strip());
+			}
+			else {
+				joined.add(line);
+			}
+		}
+		return joined;
+	}
+
+	/** ※ ☞ * → 는 안내문, <...> 는 "<민원인이 제출해야 하는 서류>" 같은 소제목 */
+	private static boolean isNote(String line) {
+		return line.startsWith("※") || line.startsWith("☞") || line.startsWith("*") || line.startsWith("→")
+				|| line.startsWith("<") || line.startsWith("〈");
+	}
+
+	private static boolean inlineCircledList(String line) {
+		return line.codePoints().filter(c -> c >= 0x2460 && c <= 0x2473 || c >= 0x2776 && c <= 0x277F).count() >= 2;
+	}
+
+	private static boolean startsWithMark(String line) {
+		String stripped = line.strip();
+		return LEADING_MARK.matcher(stripped).lookingAt() || stripped.startsWith("※") || stripped.startsWith("☞")
+				|| stripped.startsWith("→") || stripped.startsWith("<") || stripped.startsWith("(")
+				|| stripped.startsWith("[");
+	}
+
 	private static void addLine(Map<String, Document> out, String rawLine) {
 		{
 			String line = rawLine.strip();
-			if (line.isEmpty() || line.startsWith("※") || line.startsWith("☞") || line.startsWith("*")) {
+			if (line.isEmpty() || isNote(line)) {
 				return;
 			}
 			line = PAREN_LABEL.matcher(line).replaceFirst("");
 			boolean numbered = NUMBERED.matcher(line).find();
 			boolean bulletHeader = line.startsWith("○") || line.startsWith("■");
+			boolean letterHeader = LETTER_MARK.matcher(line).find();
 			line = LEADING_MARK.matcher(line).replaceFirst("");
-			// "○ 공통", "○ 근로자" 같은 소제목
-			if (bulletHeader && line.length() <= 6 && !line.contains(",")) {
+			// "○ 공통", "○ 근로자", "○ 선정 후(치료비 신청 시)" 같은 소제목
+			String lineCore = withoutTrailingParentheses(line);
+			if (bulletHeader && lineCore.length() <= 6 && !line.contains(",") && !DOCUMENT_ENDING.matcher(lineCore).find()) {
 				return;
 			}
-			for (String segment : splitOutsideParentheses(line, '/')) {
+			// "가) 일반근로자", "나) 사업자" 같은 소제목 (서류 이름처럼 끝나지 않는 짧은 줄)
+			if (letterHeader && line.length() <= 8 && !DOCUMENT_ENDING.matcher(withoutTrailingParentheses(line)).find()) {
+				return;
+			}
+			// 번호 붙은 줄은 한 줄이 서류 하나다. " / " 뒤는 발급처·서식 안내("국세 완납증명서 1부 / 홈텍스, 세무서")라 버리고,
+			// 띄어 쓰지 않은 "/" 는 "발생일/신고일" 같은 설명 안에 있어서 나누지 않는다
+			List<String> segments = numbered ? List.of(beforeSpacedSlash(line)) : splitOutsideParentheses(line, '/');
+			for (String segment : segments) {
 				addSegment(out, segment, numbered);
 			}
 		}
@@ -82,7 +160,7 @@ public final class DocumentListParser {
 			text = text.substring(tag.end()).strip();
 		}
 		// "필수 제출서류: 신분증, 면접증빙서류" — 콜론 앞이 머리말이면 뒤쪽을 목록으로 쓴다
-		int colon = text.indexOf(':');
+		int colon = indexOutsideParentheses(text, ':');
 		if (colon > 0 && colon < text.length() - 1) {
 			String head = text.substring(0, colon).strip();
 			if (head.endsWith("서류") || head.endsWith("제출") || head.endsWith("필수") || head.endsWith("선택")) {
@@ -108,23 +186,101 @@ public final class DocumentListParser {
 
 	private static String cleanName(String part) {
 		String name = part.strip();
-		int note = name.indexOf('※');
+		// "※ ..." 와 "*공고일 이후 발급분만 인정" 같은 각주는 떼어 낸다. 괄호 안 "*" 는 각주가 아니다: "증명사진(3*4)"
+		int note = firstIndexOf(name.indexOf('※'), indexOutsideParentheses(name, '*'));
 		if (note >= 0) {
 			name = name.substring(0, note).strip();
 		}
-		int colon = name.indexOf(':');
+		// "주민등록표 초본: 신청월 발급본" → 콜론 뒤는 설명. 괄호 안 콜론("(취창업자:본인)")은 그대로 둔다
+		int colon = indexOutsideParentheses(name, ':');
 		if (colon > 0) {
 			name = name.substring(0, colon).strip();
+			// "분량 : A4 3페이지", "과제 1 : 기획안 작성" 처럼 콜론 앞이 서류 이름이 아닌 짧은 머리말
+			if (name.length() <= 6 && !DOCUMENT_ENDING.matcher(name).find()) {
+				return null;
+			}
 		}
 		name = name.replaceAll("\\s*등\\s*\\d+\\s*종$", "").replaceAll("^(?:및|또는)\\s+", "").strip();
-		if (name.isEmpty() || name.equals("-") || name.length() < 2 || name.length() > MAX_NAME) {
-			return null;
-		}
 		String lower = name.toLowerCase();
 		if (NOTE_WORDS.stream().anyMatch(lower::contains)) {
 			return null;
 		}
+		name = CHOOSE_ONE.matcher(name).replaceFirst("");
+		name = TRAILING_VERB.matcher(name).replaceFirst("");
+		if (name.isEmpty() || name.equals("-") || name.length() < 2 || name.length() > MAX_NAME) {
+			return null;
+		}
+		String core = withoutTrailingParentheses(name);
+		if (core.isEmpty() || SECTION_HEADER.matcher(core).find() || SENTENCE_ENDING.matcher(core).find()) {
+			return null;
+		}
 		return name;
+	}
+
+	/** 끝에 붙은 괄호 설명을 뗀다: "신분증 (방문신청시 필수지참)" → "신분증". 괄호만 있는 이름은 그대로 */
+	private static String withoutTrailingParentheses(String name) {
+		String core = name.strip();
+		while (core.endsWith(")") || core.endsWith("]")) {
+			char close = core.charAt(core.length() - 1);
+			char open = close == ')' ? '(' : '[';
+			int depth = 0;
+			int start = -1;
+			for (int i = core.length() - 1; i >= 0; i--) {
+				char ch = core.charAt(i);
+				if (ch == close) {
+					depth++;
+				}
+				else if (ch == open && --depth == 0) {
+					start = i;
+					break;
+				}
+			}
+			if (start <= 0) {
+				break;
+			}
+			core = core.substring(0, start).strip();
+		}
+		return core;
+	}
+
+	private static String beforeSpacedSlash(String line) {
+		int depth = 0;
+		for (int i = 1; i < line.length() - 1; i++) {
+			char c = line.charAt(i);
+			if (c == '(' || c == '[') {
+				depth++;
+			}
+			else if ((c == ')' || c == ']') && depth > 0) {
+				depth--;
+			}
+			else if (c == '/' && depth == 0 && Character.isWhitespace(line.charAt(i - 1))
+					&& Character.isWhitespace(line.charAt(i + 1))) {
+				return line.substring(0, i);
+			}
+		}
+		return line;
+	}
+
+	private static int firstIndexOf(int a, int b) {
+		return a < 0 ? b : b < 0 ? a : Math.min(a, b);
+	}
+
+	/** 괄호 밖에 있는 첫 번째 ch 의 위치, 없으면 -1 */
+	static int indexOutsideParentheses(String text, char ch) {
+		int depth = 0;
+		for (int i = 0; i < text.length(); i++) {
+			char c = text.charAt(i);
+			if (c == '(' || c == '[' || c == '（') {
+				depth++;
+			}
+			else if ((c == ')' || c == ']' || c == '）') && depth > 0) {
+				depth--;
+			}
+			else if (c == ch && depth == 0) {
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	/** 괄호 밖의 구분자에서만 나눈다: "거주지 증빙(초본, 재학증명서), 통장사본" → 2개. ',' 는 '，' '、' 도 포함 */
