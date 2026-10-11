@@ -41,7 +41,16 @@ class ProfileApiIntegrationTest {
 
 		mockMvc.perform(put("/api/v1/me/profile").header("X-Anonymous-Id", id)
 			.contentType(MediaType.APPLICATION_JSON)
-			.content(body)).andExpect(status().isOk()).andExpect(jsonPath("$.residenceSido").value("서울"));
+			.content(body))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.residenceSido").value("서울"))
+			.andExpect(jsonPath("$.residenceName").value("서울 관악구"));
+
+		mockMvc.perform(get("/api/v1/regions"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.length()").value(16))
+			.andExpect(jsonPath("$[0].name").value("서울"))
+			.andExpect(jsonPath("$[0].sigungu[?(@.code == '11620')].label").value("관악구"));
 
 		mockMvc.perform(get("/api/v1/me/profile").header("X-Anonymous-Id", id))
 			.andExpect(status().isOk())
@@ -61,6 +70,12 @@ class ProfileApiIntegrationTest {
 			.content("{\"zipCd\":\"seoul\",\"jobCd\":\"0013010\"}"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.errors.zipCd").exists());
+
+		mockMvc.perform(put("/api/v1/me/profile").header("X-Anonymous-Id", UUID.randomUUID().toString())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"zipCd\":\"99999\"}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.errors.zipCd").value("알 수 없는 시군구 코드: 99999"));
 
 		mockMvc.perform(put("/api/v1/me/profile").header("X-Anonymous-Id", UUID.randomUUID().toString())
 			.contentType(MediaType.APPLICATION_JSON)

@@ -6,6 +6,7 @@ import com.youthbenefit.eligibility.Condition.Cmp;
 import com.youthbenefit.eligibility.Condition.Not;
 import com.youthbenefit.eligibility.Condition.Unparsed;
 import com.youthbenefit.policy.Policy;
+import com.youthbenefit.policy.Regions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -31,7 +32,8 @@ public final class OntongConditions {
 		List<Condition> children = new ArrayList<>();
 		age(p, children);
 		if (!p.isNationwide() && p.getZipCd() != null) {
-			children.add(new Check("zipCd", Cmp.IN, split(p.getZipCd()), "zipCd"));
+			// 옛 코드(인천 재편 전)·구로 나뉜 시 코드(화성시)도 지금 코드로 넓혀 본다
+			children.add(new Check("zipCd", Cmp.IN, Regions.withSuccessors(split(p.getZipCd())), "zipCd"));
 		}
 		income(p, children);
 		codes(children, "jobCd", p.getJobCd(), JOB_UNRESTRICTED, Cmp.IN);

@@ -97,10 +97,16 @@ public final class ConditionEvaluator {
 				case LTE -> "만 " + v.get(0) + "세 이하";
 				default -> v.toString();
 			};
-			case "zipCd" -> c.cmp() == Cmp.STARTS_WITH
-					? String.join("·", Regions.displayNames(false, v)) + " 거주 (주민등록)"
-					: String.join("·", Regions.displayNames(false, Regions.sidoCodes(String.join(",", v))))
-							+ " 주민등록 (시군구 " + v.size() + "곳)";
+			case "zipCd" -> {
+				// 지역이 3곳 이하면 이름으로("인천 연수구 주민등록"), 많으면 시도와 개수로("경기·강원 주민등록 (시군구 40곳)")
+				List<String> names = Regions.displayNamesOf(v);
+				if (c.cmp() == Cmp.STARTS_WITH) {
+					yield String.join("·", names) + " 거주 (주민등록)";
+				}
+				yield names.size() <= 3 ? String.join("·", names) + " 주민등록"
+						: String.join("·", Regions.displayNames(false, Regions.sidoCodes(String.join(",", v))))
+								+ " 주민등록 (시군구 " + v.size() + "곳)";
+			}
 			case "gradeLevel" -> switch (c.cmp()) {
 				case BETWEEN -> v.get(0).equals(v.get(1)) ? v.get(0) + "학년" : v.get(0) + "~" + v.get(1) + "학년";
 				case GTE -> v.get(0) + "학년 이상";
@@ -118,8 +124,7 @@ public final class ConditionEvaluator {
 	static String describeValue(String var, Object mine) {
 		return switch (var) {
 			case "age" -> "만 " + mine + "세";
-			case "zipCd" -> String.join("", Regions.displayNames(false, Regions.sidoCodes(mine.toString()))) + " (" + mine
-					+ ")";
+			case "zipCd" -> Regions.displayName(mine.toString());
 			case "annualIncome" -> "연소득 " + won(mine.toString());
 			case "householdMedianIncomePct" -> "기준중위소득 " + mine + "%";
 			case "gradeLevel" -> mine + "학년";

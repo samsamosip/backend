@@ -161,7 +161,8 @@ public final class HarvesterConditions {
 	}
 
 	/**
-	 * 거주지가 시도 이름("인천", "제주특별자치도")이면 주민등록 시도와 비교한다. 시군구·동 이름은 코드 목록이 없어 미확인.
+	 * 거주지 이름("인천", "춘천시", "울산 남구", "용인시")을 시도·시군구 코드로 바꿔 주민등록 주소와 비교한다.
+	 * 동·읍·면 단위이거나 여러 곳에 있는 이름("남구")이면 정할 수 없어 미확인.
 	 * 보호자 거주도 인정하는 경우(self_or_parent) 내 주소가 달라도 보호자 주소가 맞을 수 있어 "불일치" 대신 미확인이 된다.
 	 */
 	private static void residency(JsonNode e, List<Condition> out) {
@@ -171,13 +172,14 @@ public final class HarvesterConditions {
 		List<String> regions = strings(e.path("residency_region_codes"));
 		String place = String.join(", ", regions);
 		boolean parent = "self_or_parent".equals(text(e, "residency_subject"));
-		if (regions.isEmpty() || regions.stream().anyMatch(r -> Regions.sidoCodeOf(r) == null)) {
+		List<List<String>> resolved = regions.stream().map(Regions::resolve).toList();
+		if (regions.isEmpty() || resolved.stream().anyMatch(List::isEmpty)) {
 			out.add(new Unparsed("거주지", (place.isEmpty() ? "거주지 조건" : place + " 거주")
 					+ (parent ? " (본인 또는 보호자)" : "")));
 			return;
 		}
-		List<String> sido = regions.stream().map(Regions::sidoCodeOf).distinct().toList();
-		Check check = new Check("zipCd", Cmp.STARTS_WITH, sido, "residency_region_codes=" + regions);
+		List<String> prefixes = resolved.stream().flatMap(List::stream).distinct().toList();
+		Check check = new Check("zipCd", Cmp.STARTS_WITH, prefixes, "residency_region_codes=" + regions);
 		out.add(parent ? new Any(List.of(check, new Unparsed("보호자 거주지", place + " 거주 보호자도 인정"))) : check);
 	}
 

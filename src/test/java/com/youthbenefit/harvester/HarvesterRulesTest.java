@@ -131,10 +131,21 @@ class HarvesterRulesTest {
 	}
 
 	@Test
-	void sigunguResidenceAndGenericSchoolsStayUnknown() {
-		String json = detail.replace("\"인천광역시\"", "\"춘천시\"").replace("[\"인하대학교\"]", "[\"국내 4년제 대학\"]");
-		PolicyEligibility e = judge(policy(json), student("28185", "인하대", 3, "3.8", "4.5"));
+	void sigunguResidenceIsComparedButDongAndGenericSchoolsStayUnknown() {
+		String chuncheon = detail.replace("\"인천광역시\"", "\"춘천시\"").replace("\"self_or_parent\"", "\"self\"");
+		assertThat(judge(policy(chuncheon), student("51110", "인하대", 3, "3.8", "4.5")).conditions())
+			.filteredOn(c -> c.label().equals("지역"))
+			.singleElement()
+			.satisfies(c -> {
+				assertThat(c.truth()).isEqualTo(Truth.TRUE);
+				assertThat(c.requirement()).isEqualTo("강원 춘천시 거주 (주민등록)");
+				assertThat(c.myValue()).isEqualTo("강원 춘천시");
+			});
+		assertThat(judge(policy(chuncheon), student("28185", "인하대", 3, "3.8", "4.5")).verdict())
+			.isEqualTo(Verdict.NO_MATCH);
 
+		String json = detail.replace("\"인천광역시\"", "\"석남1동\"").replace("[\"인하대학교\"]", "[\"국내 4년제 대학\"]");
+		PolicyEligibility e = judge(policy(json), student("28185", "인하대", 3, "3.8", "4.5"));
 		assertThat(truthOf(e, "거주지")).isEqualTo(Truth.UNKNOWN);
 		assertThat(truthOf(e, "학교")).isEqualTo(Truth.UNKNOWN);
 	}

@@ -10,7 +10,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * 프로필 응답. 저장한 값과 함께 화면용 계산값(만 나이, 시도 이름)과 아직 비어 있는 항목 목록을 준다.
+ * 프로필 응답. 저장한 값과 함께 화면용 계산값(만 나이, 시도 이름, "서울 관악구" 같은 지역 이름)과 아직 비어 있는 항목 목록을 준다.
  * missingFields 는 판정에서 "확인 필요"의 원인이 될 수 있는 항목이다. 학교 항목(schoolName~kosafIncomeBracket)은
  * 학생만 답하는 항목이라 넣지 않는다 — 학교 장학 판정에서 필요하면 그 판정의 missingFields 에 나온다.
  */
@@ -19,6 +19,7 @@ public record ProfileResponse(
 		Integer age,
 		String zipCd,
 		String residenceSido,
+		String residenceName,
 		String actualZipCd,
 		String jobCd,
 		String schoolCd,
@@ -46,7 +47,8 @@ public record ProfileResponse(
 			.stream()
 			.findFirst()
 			.orElse(null);
-		return new ProfileResponse(p.getBirthDate(), age, p.getZipCd(), sido, p.getActualZipCd(), p.getJobCd(),
+		return new ProfileResponse(p.getBirthDate(), age, p.getZipCd(), sido, Regions.displayName(p.getZipCd()),
+				p.getActualZipCd(), p.getJobCd(),
 				p.getSchoolCd(), p.getMrgSttsCd(), p.getPlcyMajorCd(), splitOrNull(p.getSbizCd()),
 				p.getAnnualIncome(), p.getHouseholdMedianIncomePct(), p.getHouseholdIncomeYear(),
 				p.getHousingType(), p.getHomeowner(), splitOrNull(p.getInterestCategories()), p.getSchoolName(),

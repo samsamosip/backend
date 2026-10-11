@@ -113,20 +113,18 @@ public class HarvesterPolicyMapper {
 		return "unknown".equals(status) ? Policy.APPLY_PERIOD_CLOSED : "0057002";
 	}
 
-	/** 거주지 조건이 모두 시도 이름이면 화면 지역 표시에 쓴다. */
+	/** 거주지 조건을 모두 지역 코드로 바꿀 수 있으면 그 시도를 화면 지역 표시에 쓴다. */
 	private static List<String> sidoCodes(JsonNode eligibility) {
 		if (!"restricted".equals(text(eligibility, "residency_rule_status"))) {
 			return List.of();
 		}
 		List<String> codes = new ArrayList<>();
 		for (JsonNode r : eligibility.path("residency_region_codes")) {
-			String code = Regions.sidoCodeOf(r.asString());
-			if (code == null) {
+			List<String> prefixes = Regions.resolve(r.asString());
+			if (prefixes.isEmpty()) {
 				return List.of();
 			}
-			if (!codes.contains(code)) {
-				codes.add(code);
-			}
+			prefixes.stream().map(prefix -> prefix.substring(0, 2)).filter(c -> !codes.contains(c)).forEach(codes::add);
 		}
 		return codes;
 	}

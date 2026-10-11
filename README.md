@@ -87,6 +87,7 @@ docker compose up -d --no-build
 | `POST /api/v1/admin/ontong/sync` | 온통청년 전체 수집. 결과 `{fetched, created, updated, unchanged}` |
 | `POST /api/v1/admin/harvester/sync` | 학교 장학 수집. 결과 `{listed, skippedOld, fetched, created, updated, unchanged, failed}` |
 | `GET /api/v1/codes` | 온보딩 선택지(`jobCd`, `schoolCd`, `mrgSttsCd`, `plcyMajorCd`, `sbizCd`, `housingType`, `interestCategories`, 학교용 `enrollmentStatus`, `gpaScale`, `kosafIncomeBracket`)의 code·label |
+| `GET /api/v1/regions` | 지역 선택지: 시도 16개와 각 시군구 `{code, name, sigungu: [{code, label}]}`. 프로필 `zipCd`에는 시군구 code(5자리)를 저장 |
 | `GET /api/v1/me/profile` | 내 프로필. 만 나이(`age`), 주민등록 시도(`residenceSido`), 아직 비어 있는 항목(`missingFields`) 포함. 없으면 404 |
 | `PUT /api/v1/me/profile` | 내 프로필 전체 저장. 보내지 않은 항목은 "모름"으로 비워진다 |
 | `PATCH /api/v1/me/profile` | 보낸 항목만 수정 `{"annualIncome": 2400}`. 안 보낸 항목은 그대로, `null`은 "모름"으로. 프로필이 없으면 새로 만든다 |
@@ -151,7 +152,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `ontong/OntongSyncScheduler`, `OntongSyncController` | 정기 수집(선택), 수동 수집 API |
 | `harvester/` | 학교 장학(policy-harvester) 수집: API 호출(429면 `Retry-After`만큼 대기), 상세 → `PolicyContent`, 바뀐 것만 상세 요청 |
 | `policy/Policy`, `PolicyRepository` | 공고 엔티티, "지금 신청 가능" 조회 |
-| `policy/Regions`, `Categories` | 시도 계산·전국 판정, 대분류 통일 규칙 |
+| `policy/Regions`, `Categories` | 시도·시군구 이름표, 전국 판정, 옛 코드 → 새 코드, 거주지 이름 → 코드, 대분류 통일 규칙 |
 | `policy/PolicyController` | 목록·상세 API |
 | `profile/` | 사용자 프로필 엔티티·저장·검증, `/me` API |
 | `code/OntongCodes`, `CodeController` | 공식 코드정의서의 사용자 선택 코드와 이름, 선택지 API |
@@ -187,6 +188,16 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 (정책당 238~256개), 실제로 쓰이는 시도는 16개다(전남 46·광주 29가 전남광주 `12`로 통합). 그래서 **16개 시도를 모두
 포함하면 전국**으로 본다(`nationwide`, 2026-10 기준 638건). 목록 응답은 `zipCd` 대신 `regions`(`["전국"]` 또는
 `["서울", "대전"]`)를 준다.
+
+### 시군구 코드
+
+- `policy/Regions`에 온통청년 `zipCd`에 쓰이는 시군구 코드 261개 전부의 이름이 있다(2026-10 실측). 2026년에 바뀐 코드
+  (전남광주 12, 강원 51, 전북 52)는 옛 코드와 같은 순서이고, 시군구 하나만 대상인 공고 690건의 기관 이름·제목과 대조해 확인했다.
+  화성시 4개 구(41591 만세구, 41593 효행구, 41595 병점구, 41597 동탄구)만 데이터에 근거가 없어 미확인이다.
+- 인천 2026-07 재편(중구·동구 → 제물포구 28125·영종구 28155, 서구 → 서해구 28275·검단구 28290)과 구로 나뉜 시(화성시 41590,
+  천안시 44130)의 코드는 공고에 남아 있다. 사용자 선택지(`/api/v1/regions`)에서는 빼고, 판정할 때는 새 코드·구 코드까지 넓혀 본다
+  (화성시 공고 → 동탄구 주민도 해당). 그래서 고를 수 있는 시군구는 256개다.
+- 프로필 `zipCd`, `actualZipCd`는 고를 수 있는 코드만 받는다.
 
 ### 대분류
 
@@ -241,7 +252,7 @@ unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정�
 | `grade_min`, `grade_max` | 학년 범위 | |
 | `gpa_threshold`, `gpa_scale` | 평점 이상 | 만점이 다르면 환산하지 않고 미확인(학교마다 환산 규칙이 다름) |
 | `income_max`(`kosaf_support_bracket`) | 학자금 지원구간 이하 | 다른 소득 기준은 미확인 |
-| `residency_region_codes` | 주민등록 시도 | 시도 이름("인천", "제주특별자치도")만 비교. 시군구·동 이름은 코드 목록이 없어 미확인. 보호자 거주도 인정(`self_or_parent`)하면 내 시도가 달라도 불일치 대신 미확인 |
+| `residency_region_codes` | 주민등록 시도·시군구 | "인천", "춘천시", "울산 남구", "용인시"(구 전부) 같은 이름을 코드로 바꿔 비교. 동 단위("석남1동")나 여러 곳에 있는 이름("남구", "고성군")은 미확인. 실측 이름 72종 중 59종(사용 341/367회)을 바꾼다. 보호자 거주도 인정(`self_or_parent`)하면 내 주소가 달라도 불일치 대신 미확인 |
 | `eligible_universities` | 내 학교 이름 | "인하대"·"인하 대학교"도 같게 본다. "국내 4년제 대학"처럼 범위로 적힌 건 미확인 |
 | `residual_conditions_text` | 미확인(기타 자격 조건) | 실측상 거의 모든 장학에 있어 대부분 확인 필요로 나온다 |
 
@@ -273,17 +284,17 @@ unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정�
   제목(띄어쓰기 무시)과 주관기관(`sprvsnInstCdNm`)이 같으면 같은 공고로 보고, 목록·맞춤 공고에는 신청 가능한 것 중
   가장 최근 등록(`frstRegDt`)된 하나만 보여 준다. 나머지도 지우지 않아서 상세·준비함에서는 그대로 열린다.
   기관이 다르면 이름이 같아도 지역이 다른 별개 사업이라 묶지 않는다. 실측: 신청 가능 1,043건 → 1,015건.
+- 서산시 공고 16건이 태안군 코드(44825)로 등록돼 있다(서산시는 44210). 원본 그대로 판정하므로 서산시 주민에게는 불일치로 나온다.
 - 주관 기관 지역과 신청 가능 지역이 다를 수 있다(은평구 행사인데 전국 대상). 지역 판정은 기관명이 아니라 `zipCd`로 한다.
 
 ## 남은 작업
 
 **데이터**
-- 학교 장학: 시군구 이름 → 코드 목록(거주지 판정), `residual_conditions_text` AI 변환, Harvester `/v1/changes`로 바뀐 것만 받기
+- 학교 장학: 동 단위 거주지 판정, `residual_conditions_text` AI 변환, Harvester `/v1/changes`로 바뀐 것만 받기
 - 공고 버전 이력(현재는 최신 값만 유지)
 
 **기능**
 - 글로 된 조건(`earnEtcCn`, `addAplyQlfcCndCn`, `ptcpPrpTrgtCn`)을 AI로 조건 나무로 바꾸기 — 판정 엔진은 같은 `Condition` 나무를 그대로 판정한다
-- 지역 선택용 시군구 목록 API
 - 서류 마감·발급일 제한 같은 복수 일정(WF05), 알림(WF07), 로그인(현재 `X-Anonymous-Id` 임시)과 관리자 권한
 
 **운영**

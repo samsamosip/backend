@@ -4,6 +4,7 @@ import com.youthbenefit.application.ApplicationRepository;
 import com.youthbenefit.code.OntongCodes;
 import com.youthbenefit.common.InvalidRequestException;
 import com.youthbenefit.policy.Categories;
+import com.youthbenefit.policy.Regions;
 import jakarta.validation.Validator;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -112,6 +113,8 @@ public class ProfileService {
 		checkOne(errors, "plcyMajorCd", r.plcyMajorCd(), OntongCodes.MAJOR);
 		checkMany(errors, "sbizCd", r.sbizCd(), OntongCodes.SPECIAL_GROUP.keySet());
 		checkMany(errors, "interestCategories", r.interestCategories(), Categories.OFFICIAL);
+		checkRegion(errors, "zipCd", r.zipCd());
+		checkRegion(errors, "actualZipCd", r.actualZipCd());
 		if ((r.gpa() == null) != (r.gpaScale() == null)) {
 			errors.put(r.gpa() == null ? "gpa" : "gpaScale", "평점(gpa)과 만점(gpaScale)을 함께 보내 주세요");
 		}
@@ -128,6 +131,13 @@ public class ProfileService {
 		}
 		if (!errors.isEmpty()) {
 			throw new InvalidRequestException(errors);
+		}
+	}
+
+	/** 시군구 코드는 GET /api/v1/regions 에 있는 값만 받는다 (5자리 형식 검사는 @Pattern 이 먼저 한다) */
+	private static void checkRegion(Map<String, String> errors, String field, String code) {
+		if (code != null && code.matches("\\d{5}") && !Regions.isSelectable(code)) {
+			errors.put(field, "알 수 없는 시군구 코드: " + code);
 		}
 	}
 
