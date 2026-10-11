@@ -11,6 +11,8 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -75,6 +77,20 @@ public class UserProfile {
 		housingType = r.housingType();
 		homeowner = r.homeowner();
 		interestCategories = r.interestCategories() == null ? null : String.join(",", r.interestCategories());
+	}
+
+	/** 지금 저장된 값을 요청 모양으로. PATCH 에서 보낸 항목만 덮어쓸 때 쓴다. */
+	public ProfileRequest toRequest() {
+		return new ProfileRequest(birthDate, zipCd, actualZipCd, jobCd, schoolCd, mrgSttsCd, plcyMajorCd, list(sbizCd),
+				annualIncome, householdMedianIncomePct, householdIncomeYear, housingType, homeowner,
+				list(interestCategories));
+	}
+
+	private static List<String> list(String commaSeparated) {
+		if (commaSeparated == null) {
+			return null;
+		}
+		return commaSeparated.isEmpty() ? List.of() : Arrays.asList(commaSeparated.split(","));
 	}
 
 	@PrePersist

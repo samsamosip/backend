@@ -47,8 +47,18 @@ public class ApiExceptionHandler {
 	@ResponseStatus(HttpStatus.BAD_REQUEST)
 	public ErrorResponse unreadable(HttpMessageNotReadableException ex) {
 		// 어느 칸이 왜 틀렸는지 알 수 있으면 그 칸 이름으로 알려준다: {"status": "INTERESTED, PREPARING, APPLIED 중 하나여야 합니다"}
-		if (ex.getCause() instanceof MismatchedInputException mismatch && field(mismatch) != null) {
-			return new ErrorResponse("입력값을 확인해 주세요.", Map.of(field(mismatch), reason(mismatch.getTargetType())));
+		if (ex.getCause() instanceof MismatchedInputException mismatch) {
+			return mismatch(mismatch);
+		}
+		return new ErrorResponse("요청 본문을 읽을 수 없습니다. JSON 형식을 확인해 주세요.", Map.of());
+	}
+
+	/** PATCH 처럼 본문을 받은 뒤에 변환하다 형식이 틀린 경우. */
+	@ExceptionHandler(MismatchedInputException.class)
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	public ErrorResponse mismatch(MismatchedInputException ex) {
+		if (field(ex) != null) {
+			return new ErrorResponse("입력값을 확인해 주세요.", Map.of(field(ex), reason(ex.getTargetType())));
 		}
 		return new ErrorResponse("요청 본문을 읽을 수 없습니다. JSON 형식을 확인해 주세요.", Map.of());
 	}

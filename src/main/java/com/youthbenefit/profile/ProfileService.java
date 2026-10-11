@@ -4,16 +4,22 @@ import com.youthbenefit.application.ApplicationRepository;
 import com.youthbenefit.code.OntongCodes;
 import com.youthbenefit.common.InvalidRequestException;
 import com.youthbenefit.policy.Categories;
+import jakarta.validation.Validator;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 @Service
 @RequiredArgsConstructor
@@ -21,9 +27,18 @@ public class ProfileService {
 
 	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
+	/** PATCH 로 받을 수 있는 항목 이름 = ProfileRequest 의 항목들 */
+	static final Set<String> FIELDS = Stream.of(ProfileRequest.class.getRecordComponents())
+		.map(java.lang.reflect.RecordComponent::getName)
+		.collect(Collectors.toUnmodifiableSet());
+
 	private final UserProfileRepository repository;
 
 	private final ApplicationRepository applicationRepository;
+
+	private final JsonMapper jsonMapper;
+
+	private final Validator validator;
 
 	@Transactional(readOnly = true)
 	public Optional<ProfileResponse> find(UUID anonymousId) {
@@ -38,6 +53,38 @@ public class ProfileService {
 		profile.replace(request);
 		repository.flush();
 		return ProfileResponse.from(profile, today());
+	}
+
+	/**
+	 * 보낸 항목만 바꾼다(PATCH). 보내지 않은 항목은 그대로, null 을 보낸 항목은 "모름"으로 비운다. 프로필이 없으면 새로 만든다.
+	 * 지금 값에 보낸 값을 덮어쓴 결과를 PUT 과 같은 규칙으로 검사한다.
+	 */
+	@Transactional
+	public ProfileResponse patch(UUID anonymousId, ObjectNode changes) {
+		Map<String, String> unknown = new LinkedHashMap<>();
+		changes.propertyNames().stream().filter(f -> !FIELDS.contains(f)).forEach(f -> unknown.put(f, "알 수 없는 항목입니다"));
+		if (!unknown.isEmpty()) {
+			throw new InvalidRequestException(unknown);
+		}
+		UserProfile profile = repository.findByAnonymousId(anonymousId)
+			.orElseGet(() -> repository.save(UserProfile.create(anonymousId)));
+		ObjectNode merged = jsonMapper.valueToTree(profile.toRequest());
+		merged.setAll(changes);
+		ProfileRequest request = jsonMapper.treeToValue(merged, ProfileRequest.class);
+		validate(request);
+		validateCodes(request);
+		profile.replace(request);
+		repository.flush();
+		return ProfileResponse.from(profile, today());
+	}
+
+	/** @Valid 와 같은 검사(형식·범위). PATCH 는 합친 뒤에 검사해야 해서 직접 부른다. */
+	private void validate(ProfileRequest request) {
+		Map<String, String> errors = new LinkedHashMap<>();
+		validator.validate(request).forEach(v -> errors.putIfAbsent(v.getPropertyPath().toString(), v.getMessage()));
+		if (!errors.isEmpty()) {
+			throw new InvalidRequestException(errors);
+		}
 	}
 
 	/** 내 데이터 삭제: 프로필과 준비함 전부. 지울 게 하나도 없으면 false. */

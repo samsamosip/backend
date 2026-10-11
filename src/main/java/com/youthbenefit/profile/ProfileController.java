@@ -10,12 +10,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * 내 프로필 (WF01 온보딩, WF08 내 정보). 로그인이 생기기 전까지는 프론트가 만든 UUID 를
@@ -44,6 +46,14 @@ public class ProfileController {
 	public ProfileResponse put(@Parameter(description = "브라우저가 처음 방문 때 만든 UUID (localStorage 보관)", example = "6f1c2b7e-1d1a-4c55-9a6b-0d6a3a1e2f00") @RequestHeader(ANONYMOUS_ID) UUID anonymousId,
 			@Valid @RequestBody ProfileRequest request) {
 		return profileService.save(anonymousId, request);
+	}
+
+	/** 보낸 항목만 수정 (WF03 에서 부족한 정보 하나 입력, WF08 항목 하나 고치기). */
+	@Operation(summary = "내 프로필 일부 수정", description = "보낸 항목만 바뀐다. 보내지 않은 항목은 그대로, null 을 보내면 모름으로 비운다. 예: {\"annualIncome\": 2400}. 프로필이 없으면 새로 만든다")
+	@PatchMapping("/profile")
+	public ProfileResponse patch(@Parameter(description = "브라우저가 처음 방문 때 만든 UUID (localStorage 보관)", example = "6f1c2b7e-1d1a-4c55-9a6b-0d6a3a1e2f00") @RequestHeader(ANONYMOUS_ID) UUID anonymousId,
+			@RequestBody ObjectNode changes) {
+		return profileService.patch(anonymousId, changes);
 	}
 
 	/** 내 데이터 삭제 (WF08): 프로필과 준비함. */

@@ -81,6 +81,7 @@ docker compose up -d --no-build
 | `GET /api/v1/codes` | 온보딩 선택지(`jobCd`, `schoolCd`, `mrgSttsCd`, `plcyMajorCd`, `sbizCd`, `housingType`, `interestCategories`)의 code·label |
 | `GET /api/v1/me/profile` | 내 프로필. 만 나이(`age`), 주민등록 시도(`residenceSido`), 아직 비어 있는 항목(`missingFields`) 포함. 없으면 404 |
 | `PUT /api/v1/me/profile` | 내 프로필 전체 저장. 보내지 않은 항목은 "모름"으로 비워진다 |
+| `PATCH /api/v1/me/profile` | 보낸 항목만 수정 `{"annualIncome": 2400}`. 안 보낸 항목은 그대로, `null`은 "모름"으로. 프로필이 없으면 새로 만든다 |
 | `DELETE /api/v1/me` | 내 데이터 삭제 (프로필과 준비함) |
 | `GET /api/v1/me/matches?category=&verdict=&includeNoMatch=&page=&size=` | 맞춤 공고(WF02). 신청 가능한 공고를 내 프로필로 판정. 기본은 조건 일치 + 확인 필요, 마감 임박순. `counts`는 전체 판정 건수 |
 | `POST /api/v1/me/applications` | 준비함에 관심 저장(WF05). `{"policyId": 185}`. 공고 제출 서류로 체크리스트를 만든다. 이미 있으면 200 |
@@ -243,7 +244,7 @@ OR는 하나라도 참이면 참·모두 거짓이면 거짓·그 외 미확인�
 
 **기능**
 - 글로 된 조건(`earnEtcCn`, `addAplyQlfcCndCn`, `ptcpPrpTrgtCn`)을 AI로 조건 나무로 바꾸기 — 판정 엔진은 같은 `Condition` 나무를 그대로 판정한다
-- 프로필 항목 하나만 고치는 PATCH(WF03에서 부족한 정보 입력), 지역 선택용 시군구 목록 API
+- 지역 선택용 시군구 목록 API
 - 서류 마감·발급일 제한 같은 복수 일정(WF05), 알림(WF07), 로그인(현재 `X-Anonymous-Id` 임시)과 관리자 권한
 
 **운영**
