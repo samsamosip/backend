@@ -6,7 +6,7 @@
 
 가장 중요한 원칙: **온통청년 필드는 이름과 코드값을 그대로 저장한다.** 화면용으로 계산한 값은 별도 칸에 두고
 원본은 바꾸지 않는다. 학교 장학 공고는 [policy-harvester](https://github.com/samsamosip/policy-harvester)가
-수집·구조화하고, 이 서버는 그 API를 받아 합친다(예정).
+수집·구조화하고, 이 서버는 그 API를 받아 같은 공고 목록·판정·준비함에 합친다(`source=SCHOOL`).
 
 ## 빠른 시작
 
@@ -33,6 +33,12 @@ DB 데이터는 `postgres-data` 볼륨에 남으며, 데이터까지 지우려�
 curl -X POST localhost:8080/api/v1/admin/ontong/sync
 ```
 
+학교 장학도 받으려면(`.env`에 `HARVESTER_*` 필요). 처음에는 상세 요청 한도 때문에 30분 넘게 걸린다(이후엔 바뀐 것만 받아 빠름):
+
+```bash
+curl -X POST localhost:8080/api/v1/admin/harvester/sync
+```
+
 - 공고 목록: `http://localhost:8080/api/v1/policies?size=5`
 - **API 문서(Swagger)**: `http://localhost:8080/docs` — 모든 API의 요청·응답 모양을 보고 Try it out으로 바로 호출해 볼 수 있다
 - JDK 21이 없어도 Gradle toolchain이 자동으로 받는다. VS Code는 `.vscode/extensions.json`의 추천 확장을 설치한다.
@@ -45,7 +51,8 @@ curl -X POST localhost:8080/api/v1/admin/ontong/sync
 |---|---|---|
 | `ONTONG_API_KEY` | (없음) | 온통청년 오픈 API 인증키. youthcenter.go.kr 마이페이지에서 발급. 없으면 수집 API가 502 |
 | `ONTONG_SYNC_SCHEDULED` | `false` | `true`면 6시간마다 자동 수집(`ontong.sync.cron`, Asia/Seoul) |
-| `HARVESTER_BASE_URL`, `HARVESTER_API_KEY` | (없음) | policy-harvester API. 관리자 화면 API key 메뉴에서 발급. **아직 코드에서 쓰지 않는다** |
+| `HARVESTER_BASE_URL`, `HARVESTER_API_KEY` | (없음) | policy-harvester API. 관리자 화면 API key 메뉴에서 발급(90일 만료). 없으면 학교 장학 수집 API가 502 |
+| `HARVESTER_SYNC_SCHEDULED` | `false` | `true`면 매일 새벽 4시 학교 장학 자동 수집(`harvester.sync.cron`, Asia/Seoul) |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000` | API를 부를 수 있는 프론트 주소(콤마 구분). 배포하면 프론트 주소를 추가 |
 | `DOCKER_COMPOSE_ENABLED` | `true` | Docker 없이 직접 띄운 PostgreSQL을 쓸 때 `false` |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | 로컬 기본값 | `DOCKER_COMPOSE_ENABLED=false`일 때 쓰는 접속 정보 |
@@ -78,7 +85,8 @@ docker compose up -d --no-build
 | `GET /api/v1/policies?category=&page=&size=` | 지금 신청할 수 있는 공고. 마감 임박순, 마감일 없는(상시) 공고는 뒤로. `size` 최대 100 |
 | `GET /api/v1/policies/{id}` | 공고 상세. 자격 조건은 온통청년 코드 그대로(`jobCd`, `schoolCd` 등) |
 | `POST /api/v1/admin/ontong/sync` | 온통청년 전체 수집. 결과 `{fetched, created, updated, unchanged}` |
-| `GET /api/v1/codes` | 온보딩 선택지(`jobCd`, `schoolCd`, `mrgSttsCd`, `plcyMajorCd`, `sbizCd`, `housingType`, `interestCategories`)의 code·label |
+| `POST /api/v1/admin/harvester/sync` | 학교 장학 수집. 결과 `{listed, skippedOld, fetched, created, updated, unchanged, failed}` |
+| `GET /api/v1/codes` | 온보딩 선택지(`jobCd`, `schoolCd`, `mrgSttsCd`, `plcyMajorCd`, `sbizCd`, `housingType`, `interestCategories`, 학교용 `enrollmentStatus`, `gpaScale`, `kosafIncomeBracket`)의 code·label |
 | `GET /api/v1/me/profile` | 내 프로필. 만 나이(`age`), 주민등록 시도(`residenceSido`), 아직 비어 있는 항목(`missingFields`) 포함. 없으면 404 |
 | `PUT /api/v1/me/profile` | 내 프로필 전체 저장. 보내지 않은 항목은 "모름"으로 비워진다 |
 | `PATCH /api/v1/me/profile` | 보낸 항목만 수정 `{"annualIncome": 2400}`. 안 보낸 항목은 그대로, `null`은 "모름"으로. 프로필이 없으면 새로 만든다 |
@@ -141,13 +149,14 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `ontong/OntongPolicyMapper` | 원본 Map → `PolicyContent`. 공백 정리, 신청 기간 파싱, 지역·대분류 계산, 변경 감지 해시 |
 | `ontong/OntongSyncService` | 저장. 새 공고는 추가, 기존 공고는 해시가 바뀐 경우에만 갱신 |
 | `ontong/OntongSyncScheduler`, `OntongSyncController` | 정기 수집(선택), 수동 수집 API |
+| `harvester/` | 학교 장학(policy-harvester) 수집: API 호출(429면 `Retry-After`만큼 대기), 상세 → `PolicyContent`, 바뀐 것만 상세 요청 |
 | `policy/Policy`, `PolicyRepository` | 공고 엔티티, "지금 신청 가능" 조회 |
 | `policy/Regions`, `Categories` | 시도 계산·전국 판정, 대분류 통일 규칙 |
 | `policy/PolicyController` | 목록·상세 API |
 | `profile/` | 사용자 프로필 엔티티·저장·검증, `/me` API |
 | `code/OntongCodes`, `CodeController` | 공식 코드정의서의 사용자 선택 코드와 이름, 선택지 API |
 | `application/` | 준비함: 관심 저장, 상태, 서류 체크리스트, 제출 서류 글 → 항목 쪼개기 |
-| `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년 → 조건 변환, 맞춤 목록 API |
+| `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년·학교 장학 → 조건 변환, 맞춤 목록 API |
 | `common/ApiExceptionHandler` | 오류 응답 형식 통일 (`{message, errors}`) |
 | `common/WebConfig` | CORS 허용 주소, API 문서 제목 |
 | `resources/db/migration/` | Flyway SQL. JPA는 `validate`만 한다 |
@@ -194,6 +203,10 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
   `null`(모름)과 `[]`(해당 없음)을 구분해 저장한다(DB에는 NULL과 빈 문자열).
 - "제한없음" 코드(`0013010` 등)는 공고 쪽에서만 쓰는 값이라 사용자 값으로 받지 않는다.
 - 만 나이는 저장하지 않고 생년월일로 매번 계산한다(한국 시간 기준 오늘). 생일이 지나면 저절로 바뀐다.
+- 학교 장학용 항목(명세의 학교용 2차 변수): `schoolName`(학교 이름), `enrollmentStatus`(ENROLLED 재학 / ON_LEAVE 휴학 /
+  INCOMING 입학 예정 / RETURNING 복학 예정 / COMPLETED 수료·졸업), `gradeLevel`(1~6), `gpa`+`gpaScale`(함께, 만점 4.0·4.3·4.5·100),
+  `kosafIncomeBracket`(한국장학재단 학자금 지원구간 0~10, 0 = 기초·차상위). 명세의 `schoolId`는 학교 코드 목록이 없어 이름으로 대신한다.
+  학생만 답하는 항목이라 프로필의 `missingFields`에는 넣지 않고, 학교 장학 판정의 `missingFields`에만 나온다.
 
 ### 자격 판정 (3값)
 
@@ -218,6 +231,31 @@ OR는 하나라도 참이면 참·모두 거짓이면 거짓·그 외 미확인�
 추가 자격 조건이 있는 공고)는 AI 추출이 붙기 전까지 확인 필요로 나온다. 프로필이 없으면(헤더 없음 포함) 빈 프로필로 판정해
 조건이 있는 공고는 모두 확인 필요가 된다. 실데이터 1,043건 판정에 약 0.1초.
 
+학교 장학 공고 → 조건(`eligibility/HarvesterConditions`). Harvester는 항목마다 `*_rule_status`(restricted / unrestricted /
+unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정리 안 된 글 조건(`residual_conditions_text`)은 미확인으로 둔다.
+
+| Harvester 칸 | 조건 | 비고 |
+|---|---|---|
+| `academic_levels` | 내 학력 코드(`schoolCd`)가 해당하는가 | 학부 → 대학 재학·대졸 예정, 대학원 → 석·박사, 고교 → 고교 재학·고졸 예정. 입학 예정자를 받으면 고교 졸업(예정)·대학 졸업도 인정 |
+| `enrollment_states` | 내 학적(`enrollmentStatus`)이 목록에 있는가 | 목록에 `other`가 섞이면 내 값이 없을 때 불일치 대신 미확인 |
+| `grade_min`, `grade_max` | 학년 범위 | |
+| `gpa_threshold`, `gpa_scale` | 평점 이상 | 만점이 다르면 환산하지 않고 미확인(학교마다 환산 규칙이 다름) |
+| `income_max`(`kosaf_support_bracket`) | 학자금 지원구간 이하 | 다른 소득 기준은 미확인 |
+| `residency_region_codes` | 주민등록 시도 | 시도 이름("인천", "제주특별자치도")만 비교. 시군구·동 이름은 코드 목록이 없어 미확인. 보호자 거주도 인정(`self_or_parent`)하면 내 시도가 달라도 불일치 대신 미확인 |
+| `eligible_universities` | 내 학교 이름 | "인하대"·"인하 대학교"도 같게 본다. "국내 4년제 대학"처럼 범위로 적힌 건 미확인 |
+| `residual_conditions_text` | 미확인(기타 자격 조건) | 실측상 거의 모든 장학에 있어 대부분 확인 필요로 나온다 |
+
+### 학교 장학 수집
+
+- 목록(`/v1/opportunities`)은 요약만 주고 자격·기간·서류는 상세에 있다. 상세는 키당 분당 약 60회 제한이라 필요한 것만 받는다:
+  처음 보는 공고, `version_id`가 바뀐 공고, 아직 마감 안 된 공고. 처음 보는 공고 중 지난 학년도보다 이전 것(2026년이면 2024학년도
+  이하)은 이미 끝난 장학이라 받지 않는다. 실측(2026-10-11): 목록 1,630건 중 872건 건너뜀, 상세 758건(처음 약 35분), 신청 가능 15건.
+- 신청 기간은 `application_windows` 중 신청(application·additional_application)의 가장 이른 시작일~가장 늦은 마감일.
+  상태가 closed·cancelled 등이면 마감, 날짜가 있으면 특정기간, 없으면 상시로 온통청년 신청기간 코드에 맞춘다(목록 조회가 같은 규칙).
+- 대분류는 `교육`, 원본 분류는 `장학금`. 거주지 조건이 시도 이름이면 화면 지역에도 쓴다.
+- 서류는 Harvester가 정리한 `required_documents`를 그대로 체크리스트로 쓴다(`checklist_documents`). 필수가 아닌 것(해당자·선택)은
+  선택 서류. 상세 화면용 글(`submissionDocuments`)도 만들어 둔다.
+
 ### 준비함과 서류 체크리스트
 
 - 관심 저장할 때 온통청년 제출 서류 글(`sbmsnDcmntCn`)을 체크리스트로 쪼갠다(`application/DocumentListParser`). 줄 단위로 나누고,
@@ -240,7 +278,7 @@ OR는 하나라도 참이면 참·모두 거짓이면 거짓·그 외 미확인�
 ## 남은 작업
 
 **데이터**
-- policy-harvester 장학 데이터 합치기 (응답 형식 확정 후)
+- 학교 장학: 시군구 이름 → 코드 목록(거주지 판정), `residual_conditions_text` AI 변환, Harvester `/v1/changes`로 바뀐 것만 받기
 - 공고 버전 이력(현재는 최신 값만 유지)
 
 **기능**

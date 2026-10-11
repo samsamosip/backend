@@ -15,7 +15,7 @@ class ProfileRulesTest {
 
 	private static ProfileRequest request(LocalDate birth, String zip, String job, List<String> sbiz) {
 		return new ProfileRequest(birth, zip, null, job, "0049005", null, null, sbiz, null, null, null,
-				HousingType.MONTHLY_RENT, null, List.of("주거"));
+				HousingType.MONTHLY_RENT, null, List.of("주거"), null, null, null, null, null, null);
 	}
 
 	private static ProfileResponse saved(ProfileRequest request) {

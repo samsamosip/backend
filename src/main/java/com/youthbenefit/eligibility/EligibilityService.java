@@ -2,6 +2,7 @@ package com.youthbenefit.eligibility;
 
 import com.youthbenefit.policy.Policy;
 import com.youthbenefit.policy.PolicyRepository;
+import com.youthbenefit.policy.PolicySource;
 import com.youthbenefit.policy.PolicySummaryResponse;
 import com.youthbenefit.profile.UserProfileRepository;
 import java.time.LocalDate;
@@ -41,7 +42,7 @@ public class EligibilityService {
 	}
 
 	public PolicyEligibility judge(Policy policy, ProfileFacts facts) {
-		ConditionEvaluator.Evaluation evaluation = ConditionEvaluator.evaluate(OntongConditions.from(policy), facts);
+		ConditionEvaluator.Evaluation evaluation = ConditionEvaluator.evaluate(conditions(policy), facts);
 		Verdict verdict = Verdict.of(evaluation.truth());
 		List<String> missing = evaluation.conditions()
 			.stream()
@@ -51,6 +52,11 @@ public class EligibilityService {
 			.toList();
 		return new PolicyEligibility(policy.getId(), verdict, verdict.label(), summary(verdict, evaluation),
 				evaluation.conditions(), missing);
+	}
+
+	/** 출처마다 자격 정보 모양이 달라서 조건 나무를 만드는 곳이 다르다. 판정은 같은 엔진으로 한다. */
+	static Condition conditions(Policy policy) {
+		return policy.getSource() == PolicySource.SCHOOL ? HarvesterConditions.from(policy) : OntongConditions.from(policy);
 	}
 
 	@Transactional(readOnly = true)

@@ -41,7 +41,7 @@ class EligibilityRulesTest {
 	/** 2003-06-12생, 관악구, 미취업, 대학 재학, 월세. 소득·특화 대상은 모름. */
 	private static ProfileRequest jimin(Integer income, List<String> sbiz, LocalDate birth) {
 		return new ProfileRequest(birth, "11620", null, "0013003", "0049005", null, null, sbiz, income, null, null,
-				HousingType.MONTHLY_RENT, null, null);
+				HousingType.MONTHLY_RENT, null, null, null, null, null, null, null, null);
 	}
 
 	private PolicyEligibility judge(Policy policy, ProfileRequest request) {

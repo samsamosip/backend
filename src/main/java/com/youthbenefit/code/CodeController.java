@@ -2,6 +2,7 @@ package com.youthbenefit.code;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.youthbenefit.policy.Categories;
+import com.youthbenefit.profile.EnrollmentStatus;
 import com.youthbenefit.profile.HousingType;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -26,6 +27,14 @@ public class CodeController {
 		codes.put("housingType",
 				Arrays.stream(HousingType.values()).map(h -> new CodeOption(h.name(), h.label())).toList());
 		codes.put("interestCategories", Categories.OFFICIAL.stream().map(c -> new CodeOption(c, c)).toList());
+		// 학교 장학 판정용
+		codes.put("enrollmentStatus",
+				Arrays.stream(EnrollmentStatus.values()).map(e -> new CodeOption(e.name(), e.label())).toList());
+		codes.put("gpaScale", List.of(new CodeOption("4.5", "4.5 만점"), new CodeOption("4.3", "4.3 만점"),
+				new CodeOption("4.0", "4.0 만점"), new CodeOption("100", "100점 만점")));
+		codes.put("kosafIncomeBracket", java.util.stream.IntStream.rangeClosed(0, 10)
+			.mapToObj(i -> new CodeOption(String.valueOf(i), i == 0 ? "기초·차상위" : i + "구간"))
+			.toList());
 		return codes;
 	}
 

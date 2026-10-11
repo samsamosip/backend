@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -52,6 +53,19 @@ public class UserProfile {
 	private Boolean homeowner;
 	private String interestCategories;
 
+	/** 학교 장학 판정용 (조건 JSON 명세의 학교용 변수) */
+	private String schoolName;
+
+	@Enumerated(EnumType.STRING)
+	private EnrollmentStatus enrollmentStatus;
+
+	private Integer gradeLevel;
+	private BigDecimal gpa;
+	private BigDecimal gpaScale;
+
+	/** 한국장학재단 학자금 지원구간 0~10 (0 = 기초·차상위) */
+	private Integer kosafIncomeBracket;
+
 	private LocalDateTime createdAt;
 	private LocalDateTime updatedAt;
 
@@ -77,13 +91,19 @@ public class UserProfile {
 		housingType = r.housingType();
 		homeowner = r.homeowner();
 		interestCategories = r.interestCategories() == null ? null : String.join(",", r.interestCategories());
+		schoolName = r.schoolName() == null || r.schoolName().isBlank() ? null : r.schoolName().strip();
+		enrollmentStatus = r.enrollmentStatus();
+		gradeLevel = r.gradeLevel();
+		gpa = r.gpa();
+		gpaScale = r.gpaScale();
+		kosafIncomeBracket = r.kosafIncomeBracket();
 	}
 
 	/** 지금 저장된 값을 요청 모양으로. PATCH 에서 보낸 항목만 덮어쓸 때 쓴다. */
 	public ProfileRequest toRequest() {
 		return new ProfileRequest(birthDate, zipCd, actualZipCd, jobCd, schoolCd, mrgSttsCd, plcyMajorCd, list(sbizCd),
 				annualIncome, householdMedianIncomePct, householdIncomeYear, housingType, homeowner,
-				list(interestCategories));
+				list(interestCategories), schoolName, enrollmentStatus, gradeLevel, gpa, gpaScale, kosafIncomeBracket);
 	}
 
 	private static List<String> list(String commaSeparated) {

@@ -87,6 +87,14 @@ public class Policy {
 	/** 제목과 주관기관으로 만든 중복 판별 키. {@link Duplicates} 참고 */
 	private String duplicateKey;
 
+	/** 출처의 버전 id (학교 장학: Harvester version_id). 바뀌었을 때만 상세를 다시 받는다 */
+	private String sourceVersion;
+
+	/** 출처가 정리해 준 서류 목록 JSON. {@link PolicyContent} 참고 */
+	@JdbcTypeCode(SqlTypes.JSON)
+	@Column(columnDefinition = "jsonb")
+	private String checklistDocuments;
+
 	private LocalDateTime sourceModifiedAt;
 	private LocalDateTime sourceRegisteredAt;
 	private String rawHash;
@@ -109,6 +117,7 @@ public class Policy {
 	/** 원본이 바뀌었을 때만 true를 돌려주고 내용을 갱신한다. */
 	public boolean apply(PolicyContent c) {
 		if (c.rawHash().equals(rawHash)) {
+			sourceVersion = c.sourceVersion();
 			return false;
 		}
 		title = c.title();
@@ -151,6 +160,8 @@ public class Policy {
 		nationwide = c.nationwide();
 		categoryGroup = c.categoryGroup();
 		duplicateKey = c.duplicateKey();
+		sourceVersion = c.sourceVersion();
+		checklistDocuments = c.checklistDocuments();
 		return true;
 	}
 

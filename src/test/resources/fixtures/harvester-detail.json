@@ -1,0 +1,61 @@
+{
+  "id": "11111111-1111-4111-8111-111111111111",
+  "current_version": 2,
+  "last_updated_at": "2026-10-05T01:30:00+00:00",
+  "title": "2026학년도 2학기 인천 우수학생 장학금",
+  "description": "인천 거주 인하대학교 재학생 중 성적 우수자에게 생활비를 지원합니다.",
+  "status": "active",
+  "category": ["scholarship"],
+  "organization": "인천인재재단",
+  "academic_year": 2026,
+  "academic_term": "2",
+  "benefits": [
+    {"benefit_kind": "living_cost", "amount_kind": "fixed", "raw_text": "1인당 200만원 (1회)"}
+  ],
+  "eligibility": {
+    "university_rule_status": "restricted",
+    "eligible_universities": ["인하대학교"],
+    "academic_level_rule_status": "restricted",
+    "academic_levels": ["undergraduate"],
+    "enrollment_rule_status": "restricted",
+    "enrollment_states": ["enrolled"],
+    "grade_min": 2,
+    "grade_max": 4,
+    "age_rule_status": "unknown",
+    "age_min": null,
+    "age_max": null,
+    "gpa_rule_status": "restricted",
+    "gpa_threshold": 3.0,
+    "gpa_operator": ">=",
+    "gpa_scale": 4.5,
+    "credit_rule_status": "unknown",
+    "income_rule_status": "restricted",
+    "income_metric": "kosaf_support_bracket",
+    "income_min": null,
+    "income_max": 8.0,
+    "residency_rule_status": "restricted",
+    "residency_subject": "self_or_parent",
+    "residency_region_codes": ["인천광역시"],
+    "employment_rule_status": "unknown",
+    "employment_states": [],
+    "residual_conditions_text": "직전 학기 12학점 이상 이수"
+  },
+  "application_windows": [
+    {"window_kind": "application", "start_date": "2026-10-01", "end_date": "2026-12-31", "raw_text": "신청기간: 2026. 10. 1. ~ 12. 31."},
+    {"window_kind": "result", "start_date": null, "end_date": "2027-01-15", "raw_text": "결과 발표: 2027. 1. 15."}
+  ],
+  "application_methods": [
+    {"method": "online", "url": {"state": "stated", "value": "https://example.org/apply"}, "email": {"state": "not_found", "value": null}, "address": {"state": "not_found", "value": null}, "instructions": "온라인 신청서 작성 후 서류 업로드"}
+  ],
+  "contacts": [],
+  "required_documents": [
+    {"name": "장학금 신청서 (첨부파일 참조)", "condition": null, "requiredness": "required"},
+    {"name": "기초생활수급자 증명서", "condition": "기초생활수급자에 한함", "requiredness": "conditional"}
+  ],
+  "selection": {"process": "성적(70%) + 소득(30%)"},
+  "source_urls": [{"canonical_url": "https://example.org/notice/1"}],
+  "attachments": [],
+  "evidence": [],
+  "data_quality": {},
+  "manual_overrides": []
+}

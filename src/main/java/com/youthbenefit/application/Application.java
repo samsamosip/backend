@@ -58,7 +58,7 @@ public class Application {
 		application.anonymousId = anonymousId;
 		application.policy = policy;
 		application.status = ApplicationStatus.INTERESTED;
-		for (DocumentListParser.Document doc : DocumentListParser.parse(policy.getSubmissionDocuments())) {
+		for (DocumentListParser.Document doc : DocumentListParser.documents(policy)) {
 			application.items.add(ChecklistItem.of(application, doc.name(), doc.optional(), ChecklistItem.Source.POLICY,
 					application.items.size()));
 		}

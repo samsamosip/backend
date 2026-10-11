@@ -93,7 +93,9 @@ public class OntongPolicyMapper {
 				sidoCodes.isEmpty() ? null : String.join(",", sidoCodes),
 				Regions.isNationwide(sidoCodes),
 				categories.isEmpty() ? null : String.join(",", categories),
-				Duplicates.key(text(item, "plcyNm"), text(item, "sprvsnInstCdNm")));
+				Duplicates.key(text(item, "plcyNm"), text(item, "sprvsnInstCdNm")),
+				null,
+				null);
 	}
 
 	private static Map<String, Object> withoutVolatileFields(Map<String, Object> item) {

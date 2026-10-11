@@ -3,7 +3,10 @@ package com.youthbenefit.policy;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-/** 출처별 수집기가 만들어 넘기는 공고 내용. {@link Policy#apply}로 엔티티에 반영한다. */
+/**
+ * 출처별 수집기가 만들어 넘기는 공고 내용. {@link Policy#apply}로 엔티티에 반영한다.
+ * checklistDocuments 는 출처가 서류 목록을 정리해 준 경우의 JSON([{"name", "optional"}])이고, 없으면 submissionDocuments 글을 쪼갠다.
+ */
 public record PolicyContent(
 		String title,
 		String description,
@@ -44,5 +47,7 @@ public record PolicyContent(
 		String sidoCodes,
 		boolean nationwide,
 		String categoryGroup,
-		String duplicateKey) {
+		String duplicateKey,
+		String sourceVersion,
+		String checklistDocuments) {
 }

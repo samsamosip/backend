@@ -11,6 +11,9 @@ services:
       DB_PASSWORD: '${POSTGRES_PASSWORD:-youthbenefit}'
       ONTONG_API_KEY: '${ONTONG_API_KEY:-}'
       ONTONG_SYNC_SCHEDULED: '${ONTONG_SYNC_SCHEDULED:-false}'
+      HARVESTER_BASE_URL: '${HARVESTER_BASE_URL:-}'
+      HARVESTER_API_KEY: '${HARVESTER_API_KEY:-}'
+      HARVESTER_SYNC_SCHEDULED: '${HARVESTER_SYNC_SCHEDULED:-false}'
     ports:
       - '${APP_PORT:-8080}:8080'
     depends_on:

@@ -22,7 +22,8 @@ public sealed interface Condition {
 
 	/**
 	 * 비교 하나. var 는 사용자 변수 이름(명세 2번 표), values 는 기준값.
-	 * BETWEEN 은 [최소, 최대], LTE/GTE 는 [기준], IN 은 허용 값 목록, INTERSECTS 는 사용자 값 목록과 겹치는지.
+	 * BETWEEN 은 [최소, 최대], LTE/GTE 는 [기준], IN 은 허용 값 목록, INTERSECTS 는 사용자 값 목록과 겹치는지,
+	 * STARTS_WITH 는 사용자 값이 목록 중 하나로 시작하는지(시군구 코드가 시도 코드로 시작). gpa 의 GTE 는 [기준, 만점].
 	 */
 	record Check(String var, Cmp cmp, List<String> values, String evidence) implements Condition {
 	}
@@ -32,7 +33,7 @@ public sealed interface Condition {
 	}
 
 	enum Cmp {
-		IN, BETWEEN, LTE, GTE, INTERSECTS
+		IN, BETWEEN, LTE, GTE, INTERSECTS, STARTS_WITH
 	}
 
 }

@@ -1,10 +1,12 @@
 package com.youthbenefit.application;
 
+import com.youthbenefit.policy.Policy;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 온통청년 제출 서류 글(sbmsnDcmntCn)을 체크리스트 항목으로 쪼갠다. 원문 형식이 제각각이라(번호 목록, 쉼표 나열,
@@ -59,6 +61,16 @@ public final class DocumentListParser {
 	private static final Pattern PAREN_LABEL = Pattern.compile("^\\(\\s*[^()]{1,8}?\\s*\\)\\s*");
 
 	private DocumentListParser() {
+	}
+
+	private static final JsonMapper JSON = JsonMapper.builder().build();
+
+	/** 출처가 정리해 준 서류 목록이 있으면 그대로 쓰고(학교 장학), 없으면 제출 서류 글을 쪼갠다(온통청년). */
+	public static List<Document> documents(Policy policy) {
+		if (policy.getChecklistDocuments() != null) {
+			return List.of(JSON.readValue(policy.getChecklistDocuments(), Document[].class));
+		}
+		return parse(policy.getSubmissionDocuments());
 	}
 
 	public static List<Document> parse(String raw) {

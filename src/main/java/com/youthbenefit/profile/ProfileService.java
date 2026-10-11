@@ -27,6 +27,11 @@ public class ProfileService {
 
 	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
+	/** 학교에서 쓰는 평점 만점 */
+	static final Set<java.math.BigDecimal> GPA_SCALES = Stream.of("4", "4.3", "4.5", "100")
+		.map(v -> new java.math.BigDecimal(v).stripTrailingZeros())
+		.collect(Collectors.toUnmodifiableSet());
+
 	/** PATCH 로 받을 수 있는 항목 이름 = ProfileRequest 의 항목들 */
 	static final Set<String> FIELDS = Stream.of(ProfileRequest.class.getRecordComponents())
 		.map(java.lang.reflect.RecordComponent::getName)
@@ -107,6 +112,17 @@ public class ProfileService {
 		checkOne(errors, "plcyMajorCd", r.plcyMajorCd(), OntongCodes.MAJOR);
 		checkMany(errors, "sbizCd", r.sbizCd(), OntongCodes.SPECIAL_GROUP.keySet());
 		checkMany(errors, "interestCategories", r.interestCategories(), Categories.OFFICIAL);
+		if ((r.gpa() == null) != (r.gpaScale() == null)) {
+			errors.put(r.gpa() == null ? "gpa" : "gpaScale", "평점(gpa)과 만점(gpaScale)을 함께 보내 주세요");
+		}
+		else if (r.gpa() != null) {
+			if (!GPA_SCALES.contains(r.gpaScale().stripTrailingZeros())) {
+				errors.put("gpaScale", "만점은 4.0, 4.3, 4.5, 100 중 하나여야 합니다");
+			}
+			else if (r.gpa().compareTo(r.gpaScale()) > 0) {
+				errors.put("gpa", "평점이 만점보다 클 수 없습니다");
+			}
+		}
 		if (r.birthDate() != null && r.birthDate().isBefore(LocalDate.of(1900, 1, 1))) {
 			errors.put("birthDate", "생년월일을 확인해 주세요");
 		}

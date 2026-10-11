@@ -42,7 +42,18 @@ public final class ProfileFacts {
 		put(v, "householdMedianIncomePct", p.getHouseholdMedianIncomePct());
 		put(v, "housingType", p.getHousingType() == null ? null : p.getHousingType().name());
 		put(v, "homeowner", p.getHomeowner() == null ? null : p.getHomeowner().toString());
+		put(v, "schoolName", p.getSchoolName());
+		put(v, "enrollmentStatus", p.getEnrollmentStatus() == null ? null : p.getEnrollmentStatus().name());
+		put(v, "gradeLevel", p.getGradeLevel());
+		if (p.getGpa() != null && p.getGpaScale() != null) {
+			v.put("gpa", new Gpa(p.getGpa(), p.getGpaScale()));
+		}
+		put(v, "kosafIncomeBracket", p.getKosafIncomeBracket());
 		return new ProfileFacts(v);
+	}
+
+	/** 평점과 만점. 만점이 다르면 공고 기준과 비교하지 않는다(4.3 만점 3.8 과 4.5 만점 4.0 은 환산 규칙이 학교마다 다름). */
+	public record Gpa(java.math.BigDecimal value, java.math.BigDecimal scale) {
 	}
 
 	private static void put(Map<String, Object> v, String key, Object value) {

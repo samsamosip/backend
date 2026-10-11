@@ -35,3 +35,11 @@ ontong:
   sync:
     scheduled: ${ONTONG_SYNC_SCHEDULED:false}
     cron: "0 0 */6 * * *"  # 6시간마다
+
+harvester:
+  # 학교 장학 수집기(policy-harvester, sanvit). 키는 Harvester 관리자 화면에서 발급(90일 만료)
+  base-url: ${HARVESTER_BASE_URL:}
+  api-key: ${HARVESTER_API_KEY:}
+  sync:
+    scheduled: ${HARVESTER_SYNC_SCHEDULED:false}
+    cron: "0 0 4 * * *"    # 매일 새벽 4시

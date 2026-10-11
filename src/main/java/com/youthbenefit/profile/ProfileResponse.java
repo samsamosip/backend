@@ -1,6 +1,7 @@
 package com.youthbenefit.profile;
 
 import com.youthbenefit.policy.Regions;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
@@ -10,7 +11,8 @@ import java.util.List;
 
 /**
  * 프로필 응답. 저장한 값과 함께 화면용 계산값(만 나이, 시도 이름)과 아직 비어 있는 항목 목록을 준다.
- * missingFields 는 판정에서 "확인 필요"의 원인이 될 수 있는 항목이다.
+ * missingFields 는 판정에서 "확인 필요"의 원인이 될 수 있는 항목이다. 학교 항목(schoolName~kosafIncomeBracket)은
+ * 학생만 답하는 항목이라 넣지 않는다 — 학교 장학 판정에서 필요하면 그 판정의 missingFields 에 나온다.
  */
 public record ProfileResponse(
 		LocalDate birthDate,
@@ -29,6 +31,12 @@ public record ProfileResponse(
 		HousingType housingType,
 		Boolean homeowner,
 		List<String> interestCategories,
+		String schoolName,
+		EnrollmentStatus enrollmentStatus,
+		Integer gradeLevel,
+		BigDecimal gpa,
+		BigDecimal gpaScale,
+		Integer kosafIncomeBracket,
 		List<String> missingFields,
 		LocalDateTime updatedAt) {
 
@@ -41,7 +49,8 @@ public record ProfileResponse(
 		return new ProfileResponse(p.getBirthDate(), age, p.getZipCd(), sido, p.getActualZipCd(), p.getJobCd(),
 				p.getSchoolCd(), p.getMrgSttsCd(), p.getPlcyMajorCd(), splitOrNull(p.getSbizCd()),
 				p.getAnnualIncome(), p.getHouseholdMedianIncomePct(), p.getHouseholdIncomeYear(),
-				p.getHousingType(), p.getHomeowner(), splitOrNull(p.getInterestCategories()), missing(p),
+				p.getHousingType(), p.getHomeowner(), splitOrNull(p.getInterestCategories()), p.getSchoolName(),
+				p.getEnrollmentStatus(), p.getGradeLevel(), p.getGpa(), p.getGpaScale(), p.getKosafIncomeBracket(), missing(p),
 				p.getUpdatedAt());
 	}
 
