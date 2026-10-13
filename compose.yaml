@@ -14,6 +14,8 @@ services:
       HARVESTER_BASE_URL: '${HARVESTER_BASE_URL:-}'
       HARVESTER_API_KEY: '${HARVESTER_API_KEY:-}'
       HARVESTER_SYNC_SCHEDULED: '${HARVESTER_SYNC_SCHEDULED:-false}'
+      ADMIN_API_KEY: '${ADMIN_API_KEY:-}'
+      CORS_ALLOWED_ORIGINS: '${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}'
     ports:
       - '${APP_PORT:-8080}:8080'
     depends_on:
