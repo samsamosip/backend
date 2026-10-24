@@ -182,4 +182,44 @@ class ApplicationApiIntegrationTest {
 			.andExpect(jsonPath("$.message").value("공고를 찾을 수 없습니다: 999999"));
 	}
 
+	@Test
+	void startPreparingInOneCallAndRememberAppliedDate() throws Exception {
+		String me = UUID.randomUUID().toString();
+
+		// 관심으로 담아 둔 공고에서 "신청 준비 시작" → 같은 API 로 상태만 바뀐다
+		mockMvc.perform(post("/api/v1/me/applications").header("X-Anonymous-Id", me)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"policyId\":" + policyId + "}"))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.status").value("INTERESTED"));
+		String body = mockMvc.perform(post("/api/v1/me/applications").header("X-Anonymous-Id", me)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"policyId\":" + policyId + ",\"status\":\"PREPARING\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("PREPARING"))
+			.andExpect(jsonPath("$.appliedAt").doesNotExist())
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+		Integer id = JsonPath.read(body, "$.id");
+
+		// 신청 완료로 표시하면 날짜가 남고, 되돌리면 지워진다
+		mockMvc.perform(patch("/api/v1/me/applications/{id}", id).header("X-Anonymous-Id", me)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"status\":\"APPLIED\"}")).andExpect(jsonPath("$.appliedAt").exists());
+		mockMvc.perform(get("/api/v1/me/applications").header("X-Anonymous-Id", me))
+			.andExpect(jsonPath("$[0].appliedAt").exists());
+		mockMvc.perform(patch("/api/v1/me/applications/{id}", id).header("X-Anonymous-Id", me)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"status\":\"PREPARING\"}")).andExpect(jsonPath("$.appliedAt").doesNotExist());
+
+		// 처음부터 준비 중으로 담기
+		String other = UUID.randomUUID().toString();
+		mockMvc.perform(post("/api/v1/me/applications").header("X-Anonymous-Id", other)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"policyId\":" + policyId + ",\"status\":\"PREPARING\"}"))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.status").value("PREPARING"));
+	}
+
 }

@@ -78,7 +78,8 @@ class OntongSyncIntegrationTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.content[*].applyPeriodCode")
 				.value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("0057003"))))
-			.andExpect(jsonPath("$.content[0].zipCd").doesNotExist());
+			.andExpect(jsonPath("$.content[0].zipCd").doesNotExist())
+			.andExpect(jsonPath("$.content[0].source").value("ONTONG"));
 	}
 
 	@Test

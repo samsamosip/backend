@@ -22,17 +22,27 @@ public class ApplicationService {
 
 	private final PolicyRepository policyRepository;
 
-	/** 관심 저장. 이미 있으면 그것을 돌려준다(두 번 눌러도 하나). created 는 새로 만들었는지. */
+	/**
+	 * 준비함에 담기. 이미 있으면 그것을 돌려준다(두 번 눌러도 하나). status 를 주면 그 상태로 담거나 바꾼다 — 관심으로 담아 둔 공고에서
+	 * "신청 준비 시작"을 누르면 준비 중이 된다. created 는 새로 만들었는지.
+	 */
 	@Transactional
-	public Created create(UUID owner, Long policyId) {
-		return repository.findByAnonymousIdAndPolicyId(owner, policyId)
-			.map(existing -> new Created(ApplicationResponses.Detail.of(existing, today()), false))
-			.orElseGet(() -> {
-				Policy policy = policyRepository.findById(policyId)
-					.orElseThrow(() -> notFound("공고를 찾을 수 없습니다: " + policyId));
-				Application saved = repository.save(Application.create(owner, policy));
-				return new Created(ApplicationResponses.Detail.of(saved, today()), true);
-			});
+	public Created create(UUID owner, Long policyId, ApplicationStatus status) {
+		return repository.findByAnonymousIdAndPolicyId(owner, policyId).map(existing -> {
+			if (status != null) {
+				existing.changeStatus(status);
+			}
+			return new Created(ApplicationResponses.Detail.of(existing, today()), false);
+		}).orElseGet(() -> {
+			Policy policy = policyRepository.findById(policyId)
+				.orElseThrow(() -> notFound("공고를 찾을 수 없습니다: " + policyId));
+			Application application = Application.create(owner, policy);
+			if (status != null) {
+				application.changeStatus(status);
+			}
+			Application saved = repository.save(application);
+			return new Created(ApplicationResponses.Detail.of(saved, today()), true);
+		});
 	}
 
 	public record Created(ApplicationResponses.Detail application, boolean created) {

@@ -2,6 +2,7 @@ package com.youthbenefit.application;
 
 import com.youthbenefit.policy.Policy;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -41,14 +42,14 @@ public final class ApplicationResponses {
 
 	}
 
-	/** 준비함 목록의 카드 하나. */
+	/** 준비함 목록의 카드 하나. appliedAt 은 신청 완료로 표시한 시각("10.15 완료 표시"), 완료가 아니면 null. */
 	public record Summary(Long id, Long policyId, String title, String organization, ApplicationStatus status,
-			String statusLabel, Deadline deadline, Progress progress) {
+			String statusLabel, LocalDateTime appliedAt, Deadline deadline, Progress progress) {
 
 		static Summary of(Application a, LocalDate today) {
 			Policy p = a.getPolicy();
 			return new Summary(a.getId(), p.getId(), p.getTitle(), p.getOrganization(), a.getStatus(),
-					a.getStatus().label(), Deadline.of(p, today), Progress.of(a.getItems()));
+					a.getStatus().label(), a.getAppliedAt(), Deadline.of(p, today), Progress.of(a.getItems()));
 		}
 
 	}
@@ -65,13 +66,13 @@ public final class ApplicationResponses {
 	 * 준비함 상세 (WF05). submissionDocumentsRaw 는 공고 원문 — 자동으로 못 뽑은 내용이 있을 수 있어 함께 보여준다.
 	 */
 	public record Detail(Long id, Long policyId, String title, String organization, ApplicationStatus status,
-			String statusLabel, Deadline deadline, Progress progress, List<Item> items, String submissionDocumentsRaw,
-			String applyUrl, String applyMethod) {
+			String statusLabel, LocalDateTime appliedAt, Deadline deadline, Progress progress, List<Item> items,
+			String submissionDocumentsRaw, String applyUrl, String applyMethod) {
 
 		static Detail of(Application a, LocalDate today) {
 			Policy p = a.getPolicy();
 			return new Detail(a.getId(), p.getId(), p.getTitle(), p.getOrganization(), a.getStatus(),
-					a.getStatus().label(), Deadline.of(p, today), Progress.of(a.getItems()),
+					a.getStatus().label(), a.getAppliedAt(), Deadline.of(p, today), Progress.of(a.getItems()),
 					a.getItems().stream().map(Item::of).toList(), p.getSubmissionDocuments(),
 					p.getApplyUrl() != null ? p.getApplyUrl() : p.getReferenceUrl1(), p.getApplyMethod());
 		}

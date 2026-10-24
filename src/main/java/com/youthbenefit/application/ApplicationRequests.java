@@ -10,7 +10,8 @@ public final class ApplicationRequests {
 	private ApplicationRequests() {
 	}
 
-	public record Create(@NotNull(message = "policyId 가 필요합니다") Long policyId) {
+	/** status 를 보내면 그 상태로 담는다("신청 준비 시작" → PREPARING). 없으면 관심(INTERESTED). 이미 담겨 있으면 상태만 바꾼다. */
+	public record Create(@NotNull(message = "policyId 가 필요합니다") Long policyId, ApplicationStatus status) {
 	}
 
 	public record ChangeStatus(@NotNull(message = "status 가 필요합니다") ApplicationStatus status) {

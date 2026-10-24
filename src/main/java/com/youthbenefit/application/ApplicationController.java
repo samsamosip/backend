@@ -28,11 +28,11 @@ public class ApplicationController {
 
 	private final ApplicationService service;
 
-	@Operation(summary = "관심 저장", description = "공고를 준비함에 넣고 제출 서류로 체크리스트를 만든다. 이미 있으면 200 으로 기존 것을 준다")
+	@Operation(summary = "준비함에 담기", description = "공고를 준비함에 넣고 제출 서류로 체크리스트를 만든다. status 를 보내면 그 상태로(\"신청 준비 시작\" = PREPARING), 없으면 관심. 이미 있으면 200 으로 기존 것을 주고, status 를 보냈으면 상태만 바꾼다")
 	@PostMapping
 	public ResponseEntity<ApplicationResponses.Detail> create(@RequestHeader(OWNER) UUID owner,
 			@Valid @RequestBody ApplicationRequests.Create request) {
-		ApplicationService.Created result = service.create(owner, request.policyId());
+		ApplicationService.Created result = service.create(owner, request.policyId(), request.status());
 		return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK).body(result.application());
 	}
 

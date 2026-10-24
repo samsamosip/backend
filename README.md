@@ -84,7 +84,7 @@ docker compose up -d --no-build
 
 | 경로 | 내용 |
 |---|---|
-| `GET /api/v1/policies?category=&page=&size=` | 지금 신청할 수 있는 공고. 마감 임박순, 마감일 없는(상시) 공고는 뒤로. `size` 최대 100 |
+| `GET /api/v1/policies?category=&page=&size=` | 지금 신청할 수 있는 공고. 마감 임박순, 마감일 없는(상시) 공고는 뒤로. `size` 최대 100. 카드마다 `source`(ONTONG 정부 공고 / SCHOOL 학교 장학) |
 | `GET /api/v1/policies/{id}` | 공고 상세. 자격 조건은 온통청년 코드 그대로(`jobCd`, `schoolCd` 등) |
 | `POST /api/v1/admin/ontong/sync` | 온통청년 전체 수집. 결과 `{fetched, created, updated, unchanged}` |
 | `POST /api/v1/admin/harvester/sync` | 학교 장학 수집(`?full=true`면 목록 전체 비교). 결과 `{mode, seen, skippedOld, fetched, created, updated, unchanged, removed, failed}` |
@@ -95,7 +95,7 @@ docker compose up -d --no-build
 | `PATCH /api/v1/me/profile` | 보낸 항목만 수정 `{"annualIncome": 2400}`. 안 보낸 항목은 그대로, `null`은 "모름"으로. 프로필이 없으면 새로 만든다 |
 | `DELETE /api/v1/me` | 내 데이터 삭제 (프로필과 준비함) |
 | `GET /api/v1/me/matches?category=&verdict=&includeNoMatch=&page=&size=` | 맞춤 공고(WF02). 신청 가능한 공고를 내 프로필로 판정. 기본은 조건 일치 + 확인 필요, 마감 임박순. `counts`는 전체 판정 건수 |
-| `POST /api/v1/me/applications` | 준비함에 관심 저장(WF05). `{"policyId": 185}`. 공고 제출 서류로 체크리스트를 만든다. 이미 있으면 200 |
+| `POST /api/v1/me/applications` | 준비함에 담기 `{"policyId": 1}`(관심) 또는 `{"policyId": 1, "status": "PREPARING"}`("신청 준비 시작"). 이미 담겨 있으면 200으로 기존 것을 주고, status를 보냈으면 상태만 바꾼다. 응답의 `appliedAt`은 신청 완료로 표시한 시각 |
 | `GET /api/v1/me/applications` | 준비함 목록. 카드마다 상태, 마감 D-day, 준비율 |
 | `GET /api/v1/me/applications/{id}` | 준비함 상세. 체크리스트, 제출 서류 원문, 신청 링크 |
 | `PATCH /api/v1/me/applications/{id}` | 상태 변경 `{"status": "PREPARING"}` (INTERESTED / PREPARING / APPLIED) |

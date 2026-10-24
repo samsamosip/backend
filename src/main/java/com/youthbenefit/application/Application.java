@@ -49,6 +49,9 @@ public class Application {
 	@OrderBy("position ASC, id ASC")
 	private List<ChecklistItem> items = new ArrayList<>();
 
+	/** 신청 완료로 표시한 시각. 다른 상태로 되돌리면 비운다 */
+	private LocalDateTime appliedAt;
+
 	private LocalDateTime createdAt;
 
 	private LocalDateTime updatedAt;
@@ -66,6 +69,12 @@ public class Application {
 	}
 
 	void changeStatus(ApplicationStatus status) {
+		if (status == ApplicationStatus.APPLIED && this.status != ApplicationStatus.APPLIED) {
+			appliedAt = LocalDateTime.now();
+		}
+		else if (status != ApplicationStatus.APPLIED) {
+			appliedAt = null;
+		}
 		this.status = status;
 	}
 
