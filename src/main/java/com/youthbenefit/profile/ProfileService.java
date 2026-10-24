@@ -3,6 +3,7 @@ package com.youthbenefit.profile;
 import com.youthbenefit.application.ApplicationRepository;
 import com.youthbenefit.code.OntongCodes;
 import com.youthbenefit.notification.NotificationRepository;
+import com.youthbenefit.notification.NotificationSettingsRepository;
 import com.youthbenefit.common.InvalidRequestException;
 import com.youthbenefit.policy.Categories;
 import com.youthbenefit.policy.Regions;
@@ -44,6 +45,8 @@ public class ProfileService {
 	private final ApplicationRepository applicationRepository;
 
 	private final NotificationRepository notificationRepository;
+
+	private final NotificationSettingsRepository notificationSettingsRepository;
 
 	private final JsonMapper jsonMapper;
 
@@ -101,6 +104,7 @@ public class ProfileService {
 	public boolean delete(UUID anonymousId) {
 		long applications = applicationRepository.deleteByAnonymousId(anonymousId);
 		notificationRepository.deleteByAnonymousId(anonymousId);
+		notificationSettingsRepository.deleteById(anonymousId);
 		boolean profile = repository.findByAnonymousId(anonymousId).map(p -> {
 			repository.delete(p);
 			return true;

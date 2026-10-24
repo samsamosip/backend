@@ -1,6 +1,7 @@
 package com.youthbenefit.policy;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +32,10 @@ public interface PolicyRepository extends JpaRepository<Policy, Long> {
 	List<Policy> findAllBySource(PolicySource source);
 
 	java.util.Optional<Policy> findBySourceAndSourceId(PolicySource source, String sourceId);
+
+	/** 그 시각 이후 새로 저장된, 지금 신청 가능한 공고 (새 맞춤 공고 알림) */
+	@Query("select p from Policy p where " + OPEN + " and p.createdAt > :since")
+	List<Policy> findOpenCreatedAfter(@Param("today") LocalDate today, @Param("since") LocalDateTime since);
 
 	@Query("select p from Policy p where " + OPEN)
 	Page<Policy> findOpen(@Param("today") LocalDate today, Pageable pageable);

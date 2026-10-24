@@ -52,6 +52,7 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 |---|---|---|
 | `ONTONG_API_KEY` | (없음) | 온통청년 오픈 API 인증키. youthcenter.go.kr 마이페이지에서 발급. 없으면 수집 API가 502 |
 | `ONTONG_SYNC_SCHEDULED` | `false` | `true`면 6시간마다 자동 수집(`ontong.sync.cron`, Asia/Seoul) |
+| `NOTIFICATIONS_DAILY` | `true` | 매일 아침 8시 새 맞춤 공고·마감 임박 알림 생성(`notifications.daily.cron`). `false`면 끈다 |
 | `HARVESTER_BASE_URL`, `HARVESTER_API_KEY` | (없음) | policy-harvester API. 관리자 화면 API key 메뉴에서 발급(90일 만료). 없으면 학교 장학 수집 API가 502 |
 | `HARVESTER_SYNC_SCHEDULED` | `false` | `true`면 매일 새벽 4시 학교 장학 자동 수집(`harvester.sync.cron`, Asia/Seoul) |
 | `ADMIN_API_KEY` | (없음) | 관리자 API(`/api/v1/admin/**`) 키. 넣으면 `X-Admin-Key` 헤더가 같아야만 호출된다(틀리면 401). **로컬 개발에서는 비워 두고 배포 서버에만 넣는다** |
@@ -100,9 +101,11 @@ docker compose up -d --no-build
 | `GET /api/v1/me/applications` | 준비함 목록. 카드마다 상태, 마감 D-day, 준비율 |
 | `GET /api/v1/me/applications/{id}` | 준비함 상세. 체크리스트, 제출 서류 원문, 신청 링크 |
 | `PATCH /api/v1/me/applications/{id}` | 상태 변경 `{"status": "PREPARING"}` (INTERESTED / PREPARING / APPLIED) |
-| `GET /api/v1/me/notifications` | 알림함(WF07): 준비함에 담은 공고가 바뀌면 생기는 알림, 최신순. `unreadCount`(배지용), 알림마다 `kind`(마감 연장·정정·취소·마감·공고 내림·다시 게시·내용 변경)와 한 줄 `summary` |
-| `GET /api/v1/me/notifications/{id}` | 알림 상세: 바뀐 항목 전/후 `changes: [{field, label, before, after}]`. 열면 읽음 |
+| `GET /api/v1/me/notifications?type=` | 알림함(WF05): 최신순. `type`: CHANGE(담은 공고 변경) / NEW_MATCHES(새 맞춤 공고, 하루 1회 묶음) / DEADLINE(담은 공고 마감 임박). `unreadCount`(배지용), 알림마다 `label`(탭·배지 이름: 마감 연장·정정·취소·새 공고·마감 임박 등)과 한 줄 `summary` |
+| `GET /api/v1/me/notifications/{id}` | 알림 상세. 종류에 따라 `changes`(바뀐 항목 전/후 `[{field, label, before, after}]`), `newPolicies`(`{total, policies: [{policyId, title, verdict, verdictLabel}]}`), `deadline`(`{applyEndDate, daysLeft}`) 중 하나. 열면 읽음 |
 | `POST /api/v1/me/notifications/read-all`, `DELETE /api/v1/me/notifications/{id}` | 모두 읽음, 알림 삭제 |
+| `GET`·`PUT /api/v1/me/notification-settings` | 알림 설정(WF05-b): `{newMatches, newMatchVerdicts: ["MATCH","NEEDS_CHECK"], deadline, deadlineDays: [7,3,1,0], changes, quietStart, quietEnd}`. 저장한 적 없으면 전부 켜짐. 방해금지 시간은 앱 밖 발송이 생기면 쓴다 |
+| `POST /api/v1/admin/notifications/run-daily` | 매일 알림(새 맞춤 공고·마감 임박) 지금 실행. 보통은 매일 아침 8시 자동 |
 | `GET /api/v1/policies/{id}/changes` | 공고 변경 이력(누구나) |
 | `DELETE /api/v1/me/applications/{id}` | 관심 해제 |
 | `POST`·`PATCH`·`DELETE /api/v1/me/applications/{id}/items[/{itemId}]` | 서류 추가 `{"content"}` · 체크 `{"checked": true}`·이름 수정 · 삭제 |
@@ -303,6 +306,12 @@ unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정�
 - 변경 종류: 학교 장학은 Harvester 변경 목록의 `event_kind`(extended·corrected·cancelled)를 쓰고, 나머지는 짐작한다 — 마감으로 바뀜 = 마감,
   마감에서 다시 열림 = 다시 게시, 마감일이 늦어짐 = 마감 연장, 그 밖 = 내용 변경.
 - 실측(10/7 → 10/23 온통청년): 같은 공고 3,228건 중 원본이 바뀐 482건, 화면에 보이는 값이 바뀐 29건(마감 11, 마감 연장 3, 다시 게시 2, 내용 변경 13).
+- **새 맞춤 공고**(매일 아침 8시): 지난번 이후 새로 저장된 신청 가능 공고를 프로필이 있는 사람마다 판정해, 설정한 판정(기본 조건 일치·확인 필요)에
+  해당하는 것을 하루 1회 한 알림으로 묶는다(최대 20건, 조건 일치 먼저). 처음 실행은 기준 시점(`sync_cursors`의 `new-matches`)만 잡는다 —
+  기존 공고 수천 건이 새 공고로 쏟아지지 않게. 기준 시각은 공고 저장 시각과 같은 서버 시계를 쓴다(서버가 UTC여도 빠뜨리지 않게).
+- **마감 임박**(매일 아침 8시): 준비함의 관심·준비 중 공고(신청 완료·마감 처리·공고 내림 제외)가 마감 7·3·1·0일 전(설정)이면 알린다.
+- 같은 날 두 번 돌려도 알림이 늘지 않는다(`dedupe_key`). 설정에서 끈 종류는 만들지 않는다(공고 변경 알림 포함).
+- 실측(10/24): 온통청년 하루 재수집에서 원본 해시가 바뀐 480건은 모두 화면에 안 보이는 값만 바뀌어 변경 기록·알림 0건.
 - 알림은 앱 안 알림함만 있다. 카톡·이메일 발송은 채널이 정해지면 알림 생성 시점에 붙인다.
 
 ### 알려진 원본 문제

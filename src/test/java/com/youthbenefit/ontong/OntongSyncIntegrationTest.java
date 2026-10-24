@@ -51,7 +51,7 @@ class OntongSyncIntegrationTest {
 	@BeforeEach
 	void setUp() throws IOException {
 		// 변경 이력·알림·준비함이 공고를 참조해서 먼저 지운다 (다른 테스트가 남긴 것 포함)
-		jdbcTemplate.execute("delete from notifications; delete from policy_changes; delete from checklist_items; delete from applications");
+		jdbcTemplate.execute("delete from notifications; delete from policy_changes; delete from checklist_items; delete from applications; delete from sync_cursors");
 		policyRepository.deleteAll();
 		try (InputStream in = getClass().getResourceAsStream("/fixtures/ontong-response.json")) {
 			items = JsonMapper.builder().build().readValue(in, OntongResponse.class).result().youthPolicyList();

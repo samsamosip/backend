@@ -3,7 +3,9 @@ package com.youthbenefit.notification;
 import com.youthbenefit.application.ApplicationRepository;
 import com.youthbenefit.policy.Policy;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,8 @@ public class PolicyChangeRecorder {
 
 	private final ApplicationRepository applicationRepository;
 
+	private final NotificationSettingsRepository settingsRepository;
+
 	private final JsonMapper jsonMapper;
 
 	/**
@@ -36,8 +40,15 @@ public class PolicyChangeRecorder {
 		}
 		PolicyChange change = changeRepository
 			.save(new PolicyChange(policy.getId(), kind, jsonMapper.writeValueAsString(changes)));
+		// 공고 변경 알림을 끈 사람은 뺀다
 		List<UUID> owners = applicationRepository.findOwnersByPolicyId(policy.getId());
-		owners.forEach(owner -> notificationRepository.save(new Notification(owner, policy.getId(), change)));
+		Set<UUID> off = settingsRepository.findAllById(owners)
+			.stream()
+			.filter(s -> !s.isChanges())
+			.map(NotificationSettings::getAnonymousId)
+			.collect(Collectors.toSet());
+		owners = owners.stream().filter(o -> !off.contains(o)).toList();
+		owners.forEach(owner -> notificationRepository.save(Notification.change(owner, policy.getId(), change)));
 		if (!owners.isEmpty()) {
 			log.info("공고 {} {}: 알림 {}건", policy.getId(), kind.label(), owners.size());
 		}

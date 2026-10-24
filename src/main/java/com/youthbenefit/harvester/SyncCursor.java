@@ -31,7 +31,7 @@ public class SyncCursor {
 		this.value = value;
 	}
 
-	void moveTo(String value) {
+	public void moveTo(String value) {
 		this.value = value;
 	}
 

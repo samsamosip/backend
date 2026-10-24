@@ -17,7 +17,13 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	Page<Notification> findAllByAnonymousIdOrderByIdDesc(UUID anonymousId, Pageable pageable);
 
 	@EntityGraph(attributePaths = "policyChange")
+	Page<Notification> findAllByAnonymousIdAndTypeOrderByIdDesc(UUID anonymousId, NotificationType type,
+			Pageable pageable);
+
+	@EntityGraph(attributePaths = "policyChange")
 	Optional<Notification> findByIdAndAnonymousId(Long id, UUID anonymousId);
+
+	boolean existsByAnonymousIdAndDedupeKey(UUID anonymousId, String dedupeKey);
 
 	long countByAnonymousIdAndReadAtIsNull(UUID anonymousId);
 
