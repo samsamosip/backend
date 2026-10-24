@@ -94,7 +94,8 @@ docker compose up -d --no-build
 | `PUT /api/v1/me/profile` | 내 프로필 전체 저장. 보내지 않은 항목은 "모름"으로 비워진다 |
 | `PATCH /api/v1/me/profile` | 보낸 항목만 수정 `{"annualIncome": 2400}`. 안 보낸 항목은 그대로, `null`은 "모름"으로. 프로필이 없으면 새로 만든다 |
 | `DELETE /api/v1/me` | 내 데이터 삭제 (프로필과 준비함) |
-| `GET /api/v1/me/matches?category=&verdict=&includeNoMatch=&page=&size=` | 맞춤 공고(WF02). 신청 가능한 공고를 내 프로필로 판정. 기본은 조건 일치 + 확인 필요, 마감 임박순. `counts`는 전체 판정 건수 |
+| `GET /api/v1/me/matches?category=&verdict=&includeNoMatch=&page=&size=` | 맞춤 공고(WF02). 신청 가능한 공고를 내 프로필로 판정. 기본은 조건 일치 + 확인 필요, 마감 임박순. `counts`는 전체 판정 건수. `closingWithinDays=7`이면 7일 안에 마감하는 공고만(홈 "이번 주 마감", 상시 모집 제외). 카드마다 `dDay` |
+| `GET /api/v1/me/suggestions` | 홈 배너: 비어 있는 내 정보마다 채우면 판정이 확정되는 공고 수 `{field, label, resolvable, affected, message}`, 효과 큰 순. 예: "소득을 입력하면 공고 2개가 더 판정돼요". 글로 된 조건이 남아 채워도 확인 필요인 공고는 `resolvable`에 세지 않는다 |
 | `POST /api/v1/me/applications` | 준비함에 담기 `{"policyId": 1}`(관심) 또는 `{"policyId": 1, "status": "PREPARING"}`("신청 준비 시작"). 이미 담겨 있으면 200으로 기존 것을 주고, status를 보냈으면 상태만 바꾼다. 응답의 `appliedAt`은 신청 완료로 표시한 시각 |
 | `GET /api/v1/me/applications` | 준비함 목록. 카드마다 상태, 마감 D-day, 준비율 |
 | `GET /api/v1/me/applications/{id}` | 준비함 상세. 체크리스트, 제출 서류 원문, 신청 링크 |

@@ -96,4 +96,40 @@ class EligibilityApiIntegrationTest {
 			.andExpect(jsonPath("$.counts.noMatch").value(0));
 	}
 
+	@Test
+	void closingThisWeekOnlyHasDatedPoliciesInTheWindow() throws Exception {
+		// 고용환경개선사업은 2026-12-31 마감, 대학생 천원의 아침밥은 2027-02-28 마감, 직장맘지원센터는 상시 모집
+		long days = java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")),
+				java.time.LocalDate.of(2026, 12, 31));
+		org.junit.jupiter.api.Assumptions.assumeTrue(days >= 0, "고정 데이터의 마감일이 지났다");
+
+		mockMvc.perform(get("/api/v1/me/matches").param("closingWithinDays", String.valueOf(days)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content[*].policy.title").value(Matchers.contains("고용환경개선사업")))
+			.andExpect(jsonPath("$.content[0].dDay").value((int) days));
+		mockMvc.perform(get("/api/v1/me/matches"))
+			.andExpect(jsonPath("$.content[?(@.policy.title == '직장맘지원센터 운영')].dDay")
+				.value(Matchers.contains((Object) null)));
+	}
+
+	@Test
+	void suggestionsRankFieldsThatDecideMostPolicies() throws Exception {
+		String id = UUID.randomUUID().toString();
+		// 세종 거주, 나이만 앎 → 고용환경개선사업(나이·세종·재직자)은 취업 상태만 알면 확정,
+		// 직장맘지원센터(세종·취업 상태·기혼)는 취업 상태와 결혼 여부 둘 다 필요
+		mockMvc.perform(put("/api/v1/me/profile").header("X-Anonymous-Id", id)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"birthDate\":\"2000-05-01\",\"zipCd\":\"36110\"}"))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/v1/me/suggestions").header("X-Anonymous-Id", id))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[0].field").value("jobCd"))
+			.andExpect(jsonPath("$.items[0].resolvable").value(1))
+			.andExpect(jsonPath("$.items[0].affected").value(2))
+			.andExpect(jsonPath("$.items[0].message").value("취업 상태를 입력하면 공고 1개가 더 판정돼요"))
+			.andExpect(jsonPath("$.items[1].field").value("mrgSttsCd"))
+			.andExpect(jsonPath("$.items[1].message").value("결혼 여부를 입력하면 공고 1개를 더 정확히 볼 수 있어요"));
+	}
+
 }
