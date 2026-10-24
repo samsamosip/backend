@@ -2,6 +2,10 @@ package com.youthbenefit.harvester;
 
 import com.youthbenefit.harvester.HarvesterApiClient.ChangesPage;
 import com.youthbenefit.harvester.HarvesterSyncResult.Mode;
+import com.youthbenefit.notification.ChangeKind;
+import com.youthbenefit.notification.FieldChange;
+import com.youthbenefit.notification.PolicyChangeRecorder;
+import com.youthbenefit.notification.PolicyDiff;
 import com.youthbenefit.policy.Policy;
 import com.youthbenefit.policy.PolicyContent;
 import com.youthbenefit.policy.PolicyRepository;
@@ -46,12 +50,16 @@ public class HarvesterSyncService {
 
 	private final SyncCursorRepository cursorRepository;
 
+	private final PolicyChangeRecorder changeRecorder;
+
 	public HarvesterSyncService(HarvesterApiClient apiClient, HarvesterPolicyMapper mapper,
-			PolicyRepository policyRepository, SyncCursorRepository cursorRepository) {
+			PolicyRepository policyRepository, SyncCursorRepository cursorRepository,
+			PolicyChangeRecorder changeRecorder) {
 		this.apiClient = apiClient;
 		this.mapper = mapper;
 		this.policyRepository = policyRepository;
 		this.cursorRepository = cursorRepository;
+		this.changeRecorder = changeRecorder;
 	}
 
 	/** 읽은 위치가 있으면 변경만, 없으면 전체. */
@@ -85,13 +93,14 @@ public class HarvesterSyncService {
 				count.unchanged++;
 				continue;
 			}
-			fetchAndSave(id, version, policy, today, count);
+			fetchAndSave(id, version, null, policy, today, count);
 		}
 		existing.values()
 			.stream()
 			.filter(p -> !listed.contains(p.getSourceId()) && p.markRemoved())
 			.forEach(p -> {
 				policyRepository.save(p);
+				changeRecorder.record(p, ChangeKind.REMOVED, List.of());
 				count.removed++;
 			});
 		saveCursor(latest);
@@ -129,6 +138,7 @@ public class HarvesterSyncService {
 			if (!Boolean.TRUE.equals(event.get("visible_after"))) {
 				if (policy != null && policy.markRemoved()) {
 					policyRepository.save(policy);
+					changeRecorder.record(policy, ChangeKind.REMOVED, List.of());
 					count.removed++;
 				}
 				else {
@@ -143,7 +153,7 @@ public class HarvesterSyncService {
 				processed = seq;
 				continue;
 			}
-			if (!fetchAndSave(id, version, policy, today, count)) {
+			if (!fetchAndSave(id, version, Objects.toString(event.get("event_kind"), null), policy, today, count)) {
 				break;
 			}
 			processed = seq;
@@ -152,8 +162,12 @@ public class HarvesterSyncService {
 		return finish(Mode.CHANGES, events.size(), count);
 	}
 
-	/** 상세를 받아 저장한다. 실패하면 false. 처음 보는 지난 학년도 공고는 저장하지 않는다. */
-	private boolean fetchAndSave(String id, String version, Policy policy, LocalDate today, Counter count) {
+	/**
+	 * 상세를 받아 저장한다. 실패하면 false. 처음 보는 지난 학년도 공고는 저장하지 않는다. 이미 있던 공고가 바뀌면 변경을 남긴다
+	 * (eventKind 는 변경 목록의 event_kind, 전체 비교 때는 null 이라 바뀐 값으로 짐작한다).
+	 */
+	private boolean fetchAndSave(String id, String version, String eventKind, Policy policy, LocalDate today,
+			Counter count) {
 		PolicyContent content;
 		try {
 			String detail = apiClient.detail(id);
@@ -175,15 +189,30 @@ public class HarvesterSyncService {
 			return true;
 		}
 		boolean restored = policy.isSourceRemoved();
+		Policy after = Policy.create(PolicySource.SCHOOL, id, content);
+		List<FieldChange> changes = PolicyDiff.diff(policy, after);
+		ChangeKind kind = restored ? ChangeKind.RESTORED : kindOf(eventKind, policy, after);
 		policy.markRestored();
-		if (policy.apply(content) || restored) {
+		boolean contentChanged = policy.apply(content);
+		policyRepository.save(policy);
+		if (contentChanged || restored) {
+			changeRecorder.record(policy, kind, changes);
 			count.updated++;
 		}
 		else {
 			count.unchanged++;
 		}
-		policyRepository.save(policy);
 		return true;
+	}
+
+	/** Harvester 가 알려 준 변경 종류. 모르는 종류면 바뀐 값으로 짐작한다. */
+	private static ChangeKind kindOf(String eventKind, Policy before, Policy after) {
+		return switch (eventKind == null ? "" : eventKind) {
+			case "extended" -> ChangeKind.EXTENDED;
+			case "corrected" -> ChangeKind.CORRECTED;
+			case "cancelled" -> ChangeKind.CANCELLED;
+			default -> PolicyDiff.guessKind(before, after);
+		};
 	}
 
 	/** 변경 목록 끝까지 넘겨 마지막 위치를 찾는다. 변경이 하나도 없으면 "0". */

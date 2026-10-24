@@ -2,6 +2,7 @@ package com.youthbenefit.profile;
 
 import com.youthbenefit.application.ApplicationRepository;
 import com.youthbenefit.code.OntongCodes;
+import com.youthbenefit.notification.NotificationRepository;
 import com.youthbenefit.common.InvalidRequestException;
 import com.youthbenefit.policy.Categories;
 import com.youthbenefit.policy.Regions;
@@ -41,6 +42,8 @@ public class ProfileService {
 	private final UserProfileRepository repository;
 
 	private final ApplicationRepository applicationRepository;
+
+	private final NotificationRepository notificationRepository;
 
 	private final JsonMapper jsonMapper;
 
@@ -93,10 +96,11 @@ public class ProfileService {
 		}
 	}
 
-	/** 내 데이터 삭제: 프로필과 준비함 전부. 지울 게 하나도 없으면 false. */
+	/** 내 데이터 삭제: 프로필, 준비함, 알림 전부. 지울 게 하나도 없으면 false. */
 	@Transactional
 	public boolean delete(UUID anonymousId) {
 		long applications = applicationRepository.deleteByAnonymousId(anonymousId);
+		notificationRepository.deleteByAnonymousId(anonymousId);
 		boolean profile = repository.findByAnonymousId(anonymousId).map(p -> {
 			repository.delete(p);
 			return true;

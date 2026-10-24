@@ -99,6 +99,10 @@ docker compose up -d --no-build
 | `GET /api/v1/me/applications` | 준비함 목록. 카드마다 상태, 마감 D-day, 준비율 |
 | `GET /api/v1/me/applications/{id}` | 준비함 상세. 체크리스트, 제출 서류 원문, 신청 링크 |
 | `PATCH /api/v1/me/applications/{id}` | 상태 변경 `{"status": "PREPARING"}` (INTERESTED / PREPARING / APPLIED) |
+| `GET /api/v1/me/notifications` | 알림함(WF07): 준비함에 담은 공고가 바뀌면 생기는 알림, 최신순. `unreadCount`(배지용), 알림마다 `kind`(마감 연장·정정·취소·마감·공고 내림·다시 게시·내용 변경)와 한 줄 `summary` |
+| `GET /api/v1/me/notifications/{id}` | 알림 상세: 바뀐 항목 전/후 `changes: [{field, label, before, after}]`. 열면 읽음 |
+| `POST /api/v1/me/notifications/read-all`, `DELETE /api/v1/me/notifications/{id}` | 모두 읽음, 알림 삭제 |
+| `GET /api/v1/policies/{id}/changes` | 공고 변경 이력(누구나) |
 | `DELETE /api/v1/me/applications/{id}` | 관심 해제 |
 | `POST`·`PATCH`·`DELETE /api/v1/me/applications/{id}/items[/{itemId}]` | 서류 추가 `{"content"}` · 체크 `{"checked": true}`·이름 수정 · 삭제 |
 | `GET /api/v1/policies/{id}/eligibility` | 공고 하나의 조건별 판정(WF03): 공고 요구사항, 내 값, 참/거짓/미확인, 근거, 채우면 다시 판정되는 항목 |
@@ -159,6 +163,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `profile/` | 사용자 프로필 엔티티·저장·검증, `/me` API |
 | `code/OntongCodes`, `CodeController` | 공식 코드정의서의 사용자 선택 코드와 이름, 선택지 API |
 | `application/` | 준비함: 관심 저장, 상태, 서류 체크리스트, 제출 서류 글 → 항목 쪼개기 |
+| `notification/` | 공고 변경 감지(`PolicyDiff`), 변경 이력·알림 저장(`PolicyChangeRecorder`), 알림함 API |
 | `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년·학교 장학 → 조건 변환, 맞춤 목록 API |
 | `common/ApiExceptionHandler` | 오류 응답 형식 통일 (`{message, errors}`) |
 | `common/WebConfig`, `AdminKeyInterceptor` | CORS 허용 주소, API 문서 제목, 관리자 API 잠금 |
@@ -287,6 +292,18 @@ unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정�
 - 체크리스트를 다 채워도 제출 완료가 아니다. 신청 완료(`APPLIED`)는 실제 제출 후 사용자가 직접 표시한다(기획안 7쪽).
 - 다른 사람의 준비함은 404로 보인다. `DELETE /api/v1/me`는 준비함도 지운다.
 
+### 공고 변경과 알림
+
+- 수집할 때 원본이 바뀐 공고는 덮어쓰기 직전에 화면에 보이는 값을 비교한다(`notification/PolicyDiff`): 공고 제목, 신청 시작일·마감일,
+  신청 상태, 지원 내용, 제출 서류, 신청 방법, 신청 링크, 자격 조건. 자격 조건은 판정 엔진의 설명("만 19~34세")끼리 조건 이름별로 비교해서
+  온통청년·학교 장학 모두 같은 문장으로 나온다. 공백·줄바꿈·HTML 기호(`&gt;`) 차이는 변경으로 보지 않는다.
+- 바뀐 값이 있으면 `policy_changes`에 전/후를 남기고, 그 공고를 준비함에 담은 사람마다 `notifications`를 만든다. 조회수·수정 시각만 바뀌면
+  남기지 않는다. 공고 내림(학교 장학 사라짐)은 바뀐 값이 없어도 남긴다.
+- 변경 종류: 학교 장학은 Harvester 변경 목록의 `event_kind`(extended·corrected·cancelled)를 쓰고, 나머지는 짐작한다 — 마감으로 바뀜 = 마감,
+  마감에서 다시 열림 = 다시 게시, 마감일이 늦어짐 = 마감 연장, 그 밖 = 내용 변경.
+- 실측(10/7 → 10/23 온통청년): 같은 공고 3,228건 중 원본이 바뀐 482건, 화면에 보이는 값이 바뀐 29건(마감 11, 마감 연장 3, 다시 게시 2, 내용 변경 13).
+- 알림은 앱 안 알림함만 있다. 카톡·이메일 발송은 채널이 정해지면 알림 생성 시점에 붙인다.
+
 ### 알려진 원본 문제
 
 - 같은 공고가 다른 `plcyNo`로 다시 등록된 경우가 있다(예: 전남광주 신혼부부 전세자금 대출이자 지원 505·522번).
@@ -304,7 +321,7 @@ unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정�
 
 **기능**
 - 글로 된 조건(`earnEtcCn`, `addAplyQlfcCndCn`, `ptcpPrpTrgtCn`)을 AI로 조건 나무로 바꾸기 — 판정 엔진은 같은 `Condition` 나무를 그대로 판정한다
-- 서류 마감·발급일 제한 같은 복수 일정(WF05), 알림(WF07), 로그인(현재 `X-Anonymous-Id` 임시)과 관리자 권한
+- 서류 마감·발급일 제한 같은 복수 일정(WF05), 알림 외부 발송(카톡·이메일), 로그인(현재 `X-Anonymous-Id` 임시)과 관리자 권한
 
 **운영**
 - 배포, CI

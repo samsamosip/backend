@@ -36,6 +36,9 @@ class EligibilityApiIntegrationTest {
 	OntongApiClient apiClient;
 
 	@Autowired
+	org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+	@Autowired
 	OntongSyncService syncService;
 
 	@Autowired
@@ -46,6 +49,8 @@ class EligibilityApiIntegrationTest {
 
 	@BeforeEach
 	void setUp() throws Exception {
+		// 변경 이력·알림·준비함이 공고를 참조해서 먼저 지운다 (다른 테스트가 남긴 것 포함)
+		jdbcTemplate.execute("delete from notifications; delete from policy_changes; delete from checklist_items; delete from applications");
 		policyRepository.deleteAll();
 		try (InputStream in = getClass().getResourceAsStream("/fixtures/ontong-response.json")) {
 			given(apiClient.fetchAll()).willReturn(

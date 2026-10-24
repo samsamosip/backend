@@ -1,5 +1,9 @@
 package com.youthbenefit.ontong;
 
+import com.youthbenefit.notification.ChangeKind;
+import com.youthbenefit.notification.FieldChange;
+import com.youthbenefit.notification.PolicyChangeRecorder;
+import com.youthbenefit.notification.PolicyDiff;
 import com.youthbenefit.policy.Policy;
 import com.youthbenefit.policy.PolicyContent;
 import com.youthbenefit.policy.PolicyRepository;
@@ -29,6 +33,8 @@ public class OntongSyncService {
 
 	private final PolicyRepository policyRepository;
 
+	private final PolicyChangeRecorder changeRecorder;
+
 	@Transactional
 	public OntongSyncResult sync() {
 		List<Map<String, Object>> items = apiClient.fetchAll();
@@ -51,7 +57,13 @@ public class OntongSyncService {
 				created.add(newPolicy);
 				existing.put(sourceId, newPolicy);
 			}
-			else if (policy.apply(content)) {
+			else if (!content.rawHash().equals(policy.getRawHash())) {
+				// 덮어쓰기 전에 화면에 보이는 값 중 무엇이 바뀌었는지 남긴다(준비함에 담은 사람에게 알림)
+				Policy after = Policy.create(PolicySource.ONTONG, sourceId, content);
+				List<FieldChange> changes = PolicyDiff.diff(policy, after);
+				ChangeKind kind = PolicyDiff.guessKind(policy, after);
+				policy.apply(content);
+				changeRecorder.record(policy, kind, changes);
 				updated++;
 			}
 			else {

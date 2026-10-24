@@ -59,12 +59,20 @@ class HarvesterSyncIntegrationTest {
 	SyncCursorRepository cursorRepository;
 
 	@Autowired
+	com.youthbenefit.notification.NotificationRepository notificationRepository;
+
+	@Autowired
+	com.youthbenefit.notification.PolicyChangeRepository changeRepository;
+
+	@Autowired
 	MockMvc mockMvc;
 
 	private String detail;
 
 	@BeforeEach
 	void setUp() throws Exception {
+		notificationRepository.deleteAll();
+		changeRepository.deleteAll();
 		applicationRepository.deleteAll();
 		policyRepository.deleteAll();
 		cursorRepository.deleteAll();
@@ -110,11 +118,18 @@ class HarvesterSyncIntegrationTest {
 		verify(apiClient, times(1)).detail(OPEN_ID);
 		verify(apiClient, never()).detail(OLD_ID);
 
+		// 준비함에 담아 둔 사람은 공고가 내려가면 알림을 받는다
+		Policy saved = policyRepository.findAll().getFirst();
+		java.util.UUID owner = java.util.UUID.randomUUID();
+		applicationRepository.save(com.youthbenefit.application.Application.create(owner, saved));
+
 		// 합쳐짐 → 사라짐 표시, 목록에서 빠짐
 		given(apiClient.changes("1")).willReturn(page("2", event(2, OPEN_ID, "v2", false)));
 		given(apiClient.changes("2")).willReturn(page("2"));
 		assertThat(syncService.sync().removed()).isEqualTo(1);
 		assertThat(openScholarships()).isZero();
+		assertThat(notificationRepository.findAll()).singleElement()
+			.satisfies(n -> assertThat(n.getAnonymousId()).isEqualTo(owner));
 
 		// 다시 공개 → 상세를 받아 되살림
 		given(apiClient.changes("2")).willReturn(page("3", event(3, OPEN_ID, "v3", true)));

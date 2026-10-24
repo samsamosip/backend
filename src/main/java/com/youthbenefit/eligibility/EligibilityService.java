@@ -54,6 +54,11 @@ public class EligibilityService {
 				evaluation.conditions(), missing);
 	}
 
+	/** 공고의 조건을 사람이 읽을 수 있는 줄로 (판정은 facts 기준). 변경 알림에서 조건끼리 비교할 때도 쓴다. */
+	public static List<ConditionResult> describe(Policy policy, ProfileFacts facts) {
+		return ConditionEvaluator.evaluate(conditions(policy), facts).conditions();
+	}
+
 	/** 출처마다 자격 정보 모양이 달라서 조건 나무를 만드는 곳이 다르다. 판정은 같은 엔진으로 한다. */
 	static Condition conditions(Policy policy) {
 		return policy.getSource() == PolicySource.SCHOOL ? HarvesterConditions.from(policy) : OntongConditions.from(policy);
