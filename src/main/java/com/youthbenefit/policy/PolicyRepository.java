@@ -6,17 +6,19 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface PolicyRepository extends JpaRepository<Policy, Long> {
 
 	/**
-	 * 지금 신청할 수 있는 공고: 출처에서 사라지지 않았고, 마감 코드가 아니고, 마감일이 없거나 오늘 이후. 같은 공고가 여러 번 등록됐으면({@link Duplicates})
+	 * 지금 신청할 수 있는 공고: 직접 등록 공고가 아니고, 출처에서 사라지지 않았고, 마감 코드가 아니고, 마감일이 없거나 오늘 이후. 같은 공고가 여러 번 등록됐으면({@link Duplicates})
 	 * 신청 가능한 것 중 가장 최근 등록된 하나만 남긴다.
 	 */
 	String OPEN = """
-			p.sourceRemoved = false
+			p.ownerId is null
+			and p.sourceRemoved = false
 			and (p.applyPeriodCode is null or p.applyPeriodCode <> '0057003')
 			and (p.applyEndDate is null or p.applyEndDate >= :today)
 			and not exists (
@@ -30,6 +32,11 @@ public interface PolicyRepository extends JpaRepository<Policy, Long> {
 			""";
 
 	List<Policy> findAllBySource(PolicySource source);
+
+	/** 내 데이터 삭제·탈퇴 때 직접 등록 공고도 지운다. 준비함을 먼저 지우고(flush) 부른다 */
+	@Modifying
+	@Query("delete from Policy p where p.ownerId = :owner")
+	int deleteCustomByOwner(@Param("owner") java.util.UUID owner);
 
 	java.util.Optional<Policy> findBySourceAndSourceId(PolicySource source, String sourceId);
 

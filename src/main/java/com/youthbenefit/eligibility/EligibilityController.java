@@ -55,6 +55,7 @@ public class EligibilityController {
 	public PolicyEligibility eligibility(@PathVariable Long id,
 			@CurrentOwner(required = false) UUID anonymousId) {
 		return policyRepository.findById(id)
+			.filter(p -> p.visibleTo(anonymousId))
 			.map(p -> eligibilityService.judge(p, eligibilityService.facts(anonymousId)))
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "공고를 찾을 수 없습니다: " + id));
 	}

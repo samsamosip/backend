@@ -20,6 +20,9 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
 	long deleteByAnonymousId(UUID anonymousId);
 
+	/** 그 공고를 담은 모든 준비함 (서류 변경 → 체크리스트 반영) */
+	List<Application> findAllByPolicyId(Long policyId);
+
 	/** 마감일이 from~to 사이인 준비함 공고 (마감 임박 알림 대상, 신청 완료는 호출하는 쪽에서 뺀다) */
 	@EntityGraph(attributePaths = "policy")
 	@Query("""

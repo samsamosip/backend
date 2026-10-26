@@ -113,6 +113,8 @@ docker compose up -d --no-build
 | `GET /api/v1/policies/{id}/changes` | 공고 변경 이력(누구나) |
 | `DELETE /api/v1/me/applications/{id}` | 관심 해제 |
 | `POST`·`PATCH`·`DELETE /api/v1/me/applications/{id}/items[/{itemId}]` | 서류 추가 `{"content"}` · 체크 `{"checked": true}`·이름 수정 · 삭제 |
+| `POST /api/v1/me/custom-policies` | 공고 직접 등록(WF07 1차) `{title, organization, applyEndDate, applyEndTime: "18:00", category, memo, applyUrl, documents: ["재학증명서"], status}` — 공고명만 필수. 나만 보이는 공고가 생기고 준비함에 바로 담김(응답은 준비함 상세, `source: "USER"`). 판정 없음, D-day·마감 임박 알림·체크리스트는 됨 |
+| `PUT`·`DELETE /api/v1/me/custom-policies/{policyId}` | 직접 등록 공고 수정(보낸 값 전체로, 남은 서류의 체크는 유지)·삭제. 준비함에서 빼도 공고째 지워진다 |
 | `GET /api/v1/policies/{id}/eligibility` | 공고 하나의 조건별 판정(WF03): 공고 요구사항, 내 값, 참/거짓/미확인, 근거, 채우면 다시 판정되는 항목 |
 
 `/me` 경로는 로그인했으면 `Authorization: Bearer {accessToken}`, 아니면 `X-Anonymous-Id` 헤더(UUID)로 사람을 구분한다.
@@ -197,7 +199,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `policy/PolicyController` | 목록·상세 API |
 | `profile/` | 사용자 프로필 엔티티·저장·검증, `/me` API |
 | `code/OntongCodes`, `CodeController` | 공식 코드정의서의 사용자 선택 코드와 이름, 선택지 API |
-| `application/` | 준비함: 관심 저장, 상태, 서류 체크리스트, 제출 서류 글 → 항목 쪼개기 |
+| `application/` | 준비함: 관심 저장, 상태, 서류 체크리스트, 제출 서류 글 → 항목 쪼개기, 서류 변경 반영(`ChecklistSync`), 공고 직접 등록(`CustomPolicyService`) |
 | `notification/` | 공고 변경 감지(`PolicyDiff`), 변경 이력·알림 저장(`PolicyChangeRecorder`), 알림함 API |
 | `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년·학교 장학 → 조건 변환, 맞춤 목록 API |
 | `auth/` | 이메일 가입·로그인, 카카오 로그인, 비밀번호 찾기, 토큰(`TokenService`), 로그인 전 데이터 옮기기(`AccountMergeService`), `@CurrentOwner`(토큰 또는 `X-Anonymous-Id`) |
@@ -344,7 +346,17 @@ unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정�
 - **마감 임박**(매일 아침 8시): 준비함의 관심·준비 중 공고(신청 완료·마감 처리·공고 내림 제외)가 마감 7·3·1·0일 전(설정)이면 알린다.
 - 같은 날 두 번 돌려도 알림이 늘지 않는다(`dedupe_key`). 설정에서 끈 종류는 만들지 않는다(공고 변경 알림 포함).
 - 실측(10/24): 온통청년 하루 재수집에서 원본 해시가 바뀐 480건은 모두 화면에 안 보이는 값만 바뀌어 변경 기록·알림 0건.
+- **제출 서류가 바뀌면 체크리스트에 반영**: 새 서류는 추가하고 `policyChange: "ADDED"`(새로 추가), 빠진 서류는 지우지 않고(이미 체크했을 수 있어서)
+  `"DROPPED"`(공고에서 빠짐)로 표시한다. 띄어쓰기·대소문자만 다르면 같은 서류. 사용자가 추가한 항목은 건드리지 않고, 빠졌던 서류가 다시 들어오면 표시를 뗀다.
+  준비함 카드의 `documentChanges`는 표시된 항목 수("서류 변경" 배지).
 - 알림은 앱 안 알림함만 있다. 카톡·이메일 발송은 채널이 정해지면 알림 생성 시점에 붙인다.
+
+### 공고 직접 등록
+
+- 같은 `policies` 테이블에 `source = USER`, `owner_id`(등록한 사람)로 저장한다. 공개 목록·맞춤·새 공고 알림 조회(`PolicyRepository.OPEN`)는
+  `owner_id is null`만 보므로 나오지 않고, 상세·판정·준비함 담기는 주인이 아니면 404.
+- 서류 목록은 학교 장학처럼 정리된 목록(`checklist_documents`)으로 저장해 체크리스트가 그대로 만들어진다.
+- 로그인하면 계정으로 옮겨지고, 내 데이터 삭제·탈퇴 때 같이 지워진다. 링크 불러오기·캡처 읽기(WF07 2차)는 AI가 이 입력값을 채워 주는 방식으로 붙인다.
 
 ### 알려진 원본 문제
 

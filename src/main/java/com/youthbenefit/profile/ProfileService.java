@@ -6,6 +6,7 @@ import com.youthbenefit.notification.NotificationRepository;
 import com.youthbenefit.notification.NotificationSettingsRepository;
 import com.youthbenefit.common.InvalidRequestException;
 import com.youthbenefit.policy.Categories;
+import com.youthbenefit.policy.PolicyRepository;
 import com.youthbenefit.policy.Regions;
 import jakarta.validation.Validator;
 import java.time.LocalDate;
@@ -47,6 +48,8 @@ public class ProfileService {
 	private final NotificationRepository notificationRepository;
 
 	private final NotificationSettingsRepository notificationSettingsRepository;
+
+	private final PolicyRepository policyRepository;
 
 	private final JsonMapper jsonMapper;
 
@@ -99,11 +102,13 @@ public class ProfileService {
 		}
 	}
 
-	/** 내 데이터 삭제: 프로필, 준비함, 알림 전부. 지울 게 하나도 없으면 false. */
+	/** 내 데이터 삭제: 프로필, 준비함, 직접 등록 공고, 알림 전부. 지울 게 하나도 없으면 false. */
 	@Transactional
 	public boolean delete(UUID anonymousId) {
 		long applications = applicationRepository.deleteByAnonymousId(anonymousId);
 		notificationRepository.deleteByAnonymousId(anonymousId);
+		applicationRepository.flush();
+		policyRepository.deleteCustomByOwner(anonymousId);
 		notificationSettingsRepository.deleteById(anonymousId);
 		boolean profile = repository.findByAnonymousId(anonymousId).map(p -> {
 			repository.delete(p);

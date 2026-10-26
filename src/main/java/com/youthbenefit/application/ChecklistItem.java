@@ -26,6 +26,23 @@ public class ChecklistItem {
 		POLICY, USER
 	}
 
+	/** 공고 서류가 바뀌어서 붙은 표시. ADDED 공고에 새로 추가됨, DROPPED 공고에서 빠짐(지우지 않고 남겨 둔다) */
+	public enum PolicyChange {
+
+		ADDED("새로 추가"), DROPPED("공고에서 빠짐");
+
+		private final String label;
+
+		PolicyChange(String label) {
+			this.label = label;
+		}
+
+		public String label() {
+			return label;
+		}
+
+	}
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -42,6 +59,9 @@ public class ChecklistItem {
 	private Source source;
 
 	private boolean checked;
+
+	@jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+	private PolicyChange policyChange;
 
 	private int position;
 
@@ -61,6 +81,10 @@ public class ChecklistItem {
 
 	void check(boolean checked) {
 		this.checked = checked;
+	}
+
+	void markPolicyChange(PolicyChange change) {
+		this.policyChange = change;
 	}
 
 	void rename(String content) {

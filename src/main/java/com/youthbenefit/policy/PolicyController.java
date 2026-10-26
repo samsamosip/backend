@@ -1,8 +1,10 @@
 package com.youthbenefit.policy;
 
+import com.youthbenefit.auth.CurrentOwner;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -41,9 +43,11 @@ public class PolicyController {
 		return PageResponse.of(result, PolicySummaryResponse::from);
 	}
 
+	/** 직접 등록 공고는 등록한 사람만 볼 수 있다(다른 사람에게는 404). applyEndTime·memo 는 직접 등록 공고만 */
 	@GetMapping("/{id}")
-	public PolicyResponse get(@PathVariable Long id) {
+	public PolicyResponse get(@PathVariable Long id, @CurrentOwner(required = false) UUID viewer) {
 		return policyRepository.findById(id)
+			.filter(p -> p.visibleTo(viewer))
 			.map(PolicyResponse::from)
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "공고를 찾을 수 없습니다: " + id));
 	}

@@ -22,6 +22,8 @@ public class ApplicationService {
 
 	private final PolicyRepository policyRepository;
 
+	private final CustomPolicyService customPolicyService;
+
 	/**
 	 * 준비함에 담기. 이미 있으면 그것을 돌려준다(두 번 눌러도 하나). status 를 주면 그 상태로 담거나 바꾼다 — 관심으로 담아 둔 공고에서
 	 * "신청 준비 시작"을 누르면 준비 중이 된다. created 는 새로 만들었는지.
@@ -35,6 +37,7 @@ public class ApplicationService {
 			return new Created(ApplicationResponses.Detail.of(existing, today()), false);
 		}).orElseGet(() -> {
 			Policy policy = policyRepository.findById(policyId)
+				.filter(p -> p.visibleTo(owner))
 				.orElseThrow(() -> notFound("공고를 찾을 수 없습니다: " + policyId));
 			Application application = Application.create(owner, policy);
 			if (status != null) {
@@ -69,10 +72,15 @@ public class ApplicationService {
 		return ApplicationResponses.Detail.of(application, today());
 	}
 
-	/** 관심 해제. 체크리스트도 함께 지운다. */
+	/** 관심 해제. 체크리스트도 함께 지운다. 직접 등록 공고는 공고째 지운다. */
 	@Transactional
 	public void delete(UUID owner, Long id) {
-		repository.delete(find(owner, id));
+		Application application = find(owner, id);
+		if (application.getPolicy().isCustom()) {
+			customPolicyService.delete(application.getPolicy());
+			return;
+		}
+		repository.delete(application);
 	}
 
 	@Transactional

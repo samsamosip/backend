@@ -12,6 +12,8 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -98,6 +100,15 @@ public class Policy {
 	/** 출처에서 사라짐(합쳐짐·비공개·삭제). 목록·맞춤에서 빠진다 */
 	private boolean sourceRemoved;
 
+	/** 직접 등록한 공고(source = USER)의 주인. 공식 공고는 null — 주인 말고는 볼 수 없다 */
+	private UUID ownerId;
+
+	/** 직접 등록한 공고의 마감 시각 (예: 18:00) */
+	private LocalTime applyEndTime;
+
+	/** 직접 등록한 공고의 메모 */
+	private String memo;
+
 	private LocalDateTime sourceModifiedAt;
 	private LocalDateTime sourceRegisteredAt;
 	private String rawHash;
@@ -166,6 +177,46 @@ public class Policy {
 		sourceVersion = c.sourceVersion();
 		checklistDocuments = c.checklistDocuments();
 		return true;
+	}
+
+	/**
+	 * 직접 등록 공고 (WF07). 판정할 조건이 없어서 목록·맞춤에는 안 나오고, 준비함·마감 알림에만 쓴다. 서류 목록(documents)은
+	 * 학교 장학처럼 정리된 목록으로 둬서 체크리스트가 그대로 만들어진다.
+	 */
+	public static Policy custom(UUID ownerId, CustomPolicy input) {
+		Policy policy = new Policy();
+		policy.source = PolicySource.USER;
+		policy.sourceId = UUID.randomUUID().toString();
+		policy.ownerId = ownerId;
+		policy.rawHash = "user";
+		policy.rawPayload = "{}";
+		policy.edit(input);
+		return policy;
+	}
+
+	/** 직접 등록 공고 고치기. 보낸 값 전체로 바꾼다. */
+	public void edit(CustomPolicy input) {
+		title = input.title();
+		organization = input.organization();
+		applyEndDate = input.applyEndDate();
+		applyEndTime = input.applyEndDate() == null ? null : input.applyEndTime();
+		applyPeriodCode = input.applyEndDate() == null ? "0057002" : "0057001";
+		categoryGroup = input.category();
+		category = input.category();
+		memo = input.memo();
+		applyUrl = input.applyUrl();
+		submissionDocuments = input.documentsText();
+		checklistDocuments = input.documentsJson();
+		sourceRegisteredAt = sourceRegisteredAt == null ? LocalDateTime.now() : sourceRegisteredAt;
+	}
+
+	public boolean isCustom() {
+		return ownerId != null;
+	}
+
+	/** 공식 공고는 누구나, 직접 등록 공고는 주인만 볼 수 있다. */
+	public boolean visibleTo(UUID viewer) {
+		return ownerId == null || ownerId.equals(viewer);
 	}
 
 	/** 출처에서 사라졌다고 표시한다. 이미 표시돼 있으면 false. */

@@ -1,6 +1,7 @@
 package com.youthbenefit.notification;
 
 import com.youthbenefit.application.ApplicationRepository;
+import com.youthbenefit.application.ChecklistSync;
 import com.youthbenefit.policy.Policy;
 import java.util.List;
 import java.util.Set;
@@ -25,6 +26,8 @@ public class PolicyChangeRecorder {
 
 	private final NotificationSettingsRepository settingsRepository;
 
+	private final ChecklistSync checklistSync;
+
 	private final JsonMapper jsonMapper;
 
 	/**
@@ -37,6 +40,10 @@ public class PolicyChangeRecorder {
 		// 아직 저장 전인 공고(한 번의 수집에 같은 번호가 두 번 온 경우)는 남길 곳이 없다
 		if (policy.getId() == null || changes.isEmpty() && !statusOnly) {
 			return null;
+		}
+		// 제출 서류가 바뀌었으면 담은 사람들 체크리스트에 반영(새 서류 추가, 빠진 서류 표시)
+		if (changes.stream().anyMatch(c -> "submissionDocuments".equals(c.field()))) {
+			checklistSync.refresh(policy);
 		}
 		PolicyChange change = changeRepository
 			.save(new PolicyChange(policy.getId(), kind, jsonMapper.writeValueAsString(changes)));

@@ -33,4 +33,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
 	long deleteByAnonymousId(UUID anonymousId);
 
+	/** 직접 등록 공고를 지울 때 그 공고의 알림(마감 임박)도 지운다 */
+	@Modifying
+	@Query("delete from Notification n where n.policyId = :policyId")
+	int deleteByPolicyId(@Param("policyId") Long policyId);
+
 }

@@ -33,6 +33,7 @@ public class AccountMergeService {
 				  and exists (select 1 from applications b where b.anonymous_id = :to and b.policy_id = a.policy_id)
 				""", p);
 		int apps = jdbc.update("update applications set anonymous_id = :to where anonymous_id = :from", p);
+		jdbc.update("update policies set owner_id = :to where owner_id = :from", p);
 		jdbc.update("""
 				delete from notifications n where n.anonymous_id = :from and (
 				  exists (select 1 from notifications m where m.anonymous_id = :to and m.policy_change_id = n.policy_change_id)

@@ -1,6 +1,8 @@
 package com.youthbenefit.policy;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.List;
 
@@ -30,7 +32,9 @@ public record PolicyResponse(
 		String sbizCd,
 		String applyUrl,
 		String referenceUrl1,
-		String submissionDocuments) {
+		String submissionDocuments,
+		@JsonFormat(pattern = "HH:mm") LocalTime applyEndTime,
+		String memo) {
 
 	public static PolicyResponse from(Policy p) {
 		return new PolicyResponse(p.getId(), p.getSource(), p.getTitle(), p.getDescription(),
@@ -38,7 +42,7 @@ public record PolicyResponse(
 				p.getApplyStartDate(), p.getApplyEndDate(), p.isNationwide(), regions(p),
 				p.getSprtTrgtMinAge(), p.getSprtTrgtMaxAge(), p.getZipCd(), p.getEarnCndSeCd(), p.getEarnMaxAmt(),
 				p.getJobCd(), p.getSchoolCd(), p.getMrgSttsCd(), p.getPlcyMajorCd(), p.getSbizCd(), p.getApplyUrl(),
-				p.getReferenceUrl1(), p.getSubmissionDocuments());
+				p.getReferenceUrl1(), p.getSubmissionDocuments(), p.getApplyEndTime(), p.getMemo());
 	}
 
 	static List<String> regions(Policy p) {
