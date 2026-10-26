@@ -56,6 +56,10 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 | `HARVESTER_BASE_URL`, `HARVESTER_API_KEY` | (없음) | policy-harvester API. 관리자 화면 API key 메뉴에서 발급(90일 만료). 없으면 학교 장학 수집 API가 502 |
 | `HARVESTER_SYNC_SCHEDULED` | `false` | `true`면 매일 새벽 4시 학교 장학 자동 수집(`harvester.sync.cron`, Asia/Seoul) |
 | `ADMIN_API_KEY` | (없음) | 관리자 API(`/api/v1/admin/**`) 키. 넣으면 `X-Admin-Key` 헤더가 같아야만 호출된다(틀리면 401). **로컬 개발에서는 비워 두고 배포 서버에만 넣는다** |
+| `JWT_SECRET` | (없음) | 로그인 토큰 서명 키(32자 이상 아무 문자열). 비우면 실행할 때마다 새 키라 서버를 다시 켜면 모두 로그아웃된다. **배포 서버에는 꼭 넣는다** |
+| `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET` | (없음) | 카카오 디벨로퍼스 REST API 키, Client Secret. 없으면 카카오 로그인이 503 `KAKAO_NOT_CONFIGURED` |
+| `KAKAO_REDIRECT_URIS` | `http://localhost:5173/auth/kakao/callback` | 프론트 카카오 콜백 주소(콤마 구분). 카카오 콘솔 Redirect URI와 같아야 하고, 여기 없는 주소는 400 |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | (없음) | 인증 코드 메일(Gmail이면 보내는 주소와 앱 비밀번호, `MAIL_HOST`·`MAIL_PORT`로 바꿀 수 있음). **비우면 메일 대신 서버 로그에 코드를 찍는다(개발용)** |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000` | API를 부를 수 있는 프론트 주소(콤마 구분). 배포하면 프론트 주소를 추가 |
 | `DOCKER_COMPOSE_ENABLED` | `true` | Docker 없이 직접 띄운 PostgreSQL을 쓸 때 `false` |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | 로컬 기본값 | `DOCKER_COMPOSE_ENABLED=false`일 때 쓰는 접속 정보 |
@@ -81,7 +85,7 @@ docker compose up -d --no-build
 
 ## Public API
 
-인증은 아직 없다. 수집 API(`/admin`)도 로그인 기능이 생기면 관리자만 호출하도록 막는다.
+관리자 API(`/admin`)는 `ADMIN_API_KEY`로 잠근다. 사용자 로그인은 아래 [로그인](#로그인) 참고.
 
 | 경로 | 내용 |
 |---|---|
@@ -111,8 +115,35 @@ docker compose up -d --no-build
 | `POST`·`PATCH`·`DELETE /api/v1/me/applications/{id}/items[/{itemId}]` | 서류 추가 `{"content"}` · 체크 `{"checked": true}`·이름 수정 · 삭제 |
 | `GET /api/v1/policies/{id}/eligibility` | 공고 하나의 조건별 판정(WF03): 공고 요구사항, 내 값, 참/거짓/미확인, 근거, 채우면 다시 판정되는 항목 |
 
-`/me` 경로는 로그인이 생기기 전까지 `X-Anonymous-Id` 헤더(UUID)로 사람을 구분한다. 프론트가 처음 방문 때
-UUID를 만들어 localStorage에 두고 매 요청에 보낸다. 헤더가 없거나 UUID가 아니면 400.
+`/me` 경로는 로그인했으면 `Authorization: Bearer {accessToken}`, 아니면 `X-Anonymous-Id` 헤더(UUID)로 사람을 구분한다.
+프론트가 처음 방문 때 UUID를 만들어 localStorage에 두고 매 요청에 보낸다. 둘 다 없거나 UUID가 아니면 400.
+토큰이 틀리거나 만료되면 익명으로 넘어가지 않고 401(`TOKEN_EXPIRED`면 `/auth/refresh`).
+
+### 로그인
+
+| 경로 | 내용 |
+|---|---|
+| `POST /api/v1/auth/signup` | 이메일 가입 `{email, password, nickname}` → 인증 코드 메일(6자리, 10분) 202. 이미 인증된 이메일은 409 `EMAIL_TAKEN` |
+| `POST /api/v1/auth/email/resend` | 가입 코드 다시 받기 `{email}`. 1분 안이면 429 `CODE_COOLDOWN` |
+| `POST /api/v1/auth/email/verify` | 코드 확인 `{email, code}` → 바로 로그인(토큰). 400 `CODE_MISMATCH`(남은 횟수) / `CODE_EXPIRED` |
+| `POST /api/v1/auth/login` | 이메일 로그인 `{email, password}`. 401 `BAD_CREDENTIALS`(남은 횟수), 5번 틀리면 423 `ACCOUNT_LOCKED`(15분), 인증 전이면 403 `EMAIL_NOT_VERIFIED` |
+| `POST /api/v1/auth/kakao` | 카카오 로그인 `{code, redirectUri}`(카카오가 콜백으로 준 인가 코드). 처음이면 자동 가입. 401 `KAKAO_LOGIN_FAILED` |
+| `POST /api/v1/auth/refresh` | 토큰 갱신 `{refreshToken}`. 갱신 토큰도 새것으로 바뀐다. 이미 바꾼 토큰을 다시 쓰면 401 `TOKEN_REUSED` + 그 계정 전체 로그아웃 |
+| `POST /api/v1/auth/logout` | `{refreshToken}` 끊기 204 |
+| `POST /api/v1/auth/password/forgot` → `/password/verify-code` → `/password/reset` | 비밀번호 찾기 3단계: 코드 받기(가입 여부와 상관없이 202) → 코드 확인 `{email, code}` → `resetToken`(10분) → 새 비밀번호 `{resetToken, newPassword}` → 로그인. 다른 기기 로그인은 끊긴다. 400 `RESET_EXPIRED` |
+| `GET`·`PATCH /api/v1/me/account` | 내 계정 `{id, email, nickname, emailVerified, kakaoLinked, hasPassword}`, 닉네임 바꾸기 `{nickname}`. 로그인 필요(없으면 401 `LOGIN_REQUIRED`) |
+| `POST /api/v1/me/account/password` | 비밀번호 바꾸기 `{currentPassword, newPassword}`. 카카오만 쓰는 계정은 400 `NO_PASSWORD` |
+| `DELETE /api/v1/me/account` | 회원 탈퇴: 계정, 프로필, 준비함, 알림 모두 삭제 |
+
+- 로그인 응답: `{accessToken, accessTokenExpiresIn: 1800, refreshToken, refreshTokenExpiresIn: 1209600, account}`.
+  출입증(access) 30분, 갱신 토큰 14일. 오류는 `{message, errors, code}` — 화면 분기는 `code`로 한다.
+- 비밀번호: 8~64자, 영문과 숫자를 함께. 특수문자는 써도 되고 안 써도 된다. BCrypt로 저장.
+- 로그인 전에 쓰던 데이터 옮기기: 가입 완료·로그인·카카오·비밀번호 재설정 요청에 `X-Anonymous-Id`를 같이 보내면 그 UUID의 프로필·알림 설정
+  (계정에 없을 때만)·준비함(이미 담은 공고는 계정 것 유지)·알림을 계정으로 옮긴다.
+- 프론트: 로그인하면 토큰을 저장하고 `Authorization`만 보낸다. 로그아웃하면 토큰을 지우고 **새** UUID를 만든다.
+  계정의 UUID를 `X-Anonymous-Id`로 보내면 401 `LOGIN_REQUIRED`(UUID만 알아서는 계정 데이터에 못 들어온다).
+- 카카오 흐름: 프론트가 `https://kauth.kakao.com/oauth/authorize?response_type=code&client_id={REST API 키}&redirect_uri={콜백}`로 보냄 →
+  콜백 `?code=` → `POST /auth/kakao`. 닉네임이 없으면 "카카오 사용자".
 
 `category`는 공식 대분류 5개 중 하나다: `일자리`, `주거`, `교육`, `복지문화`, `참여권리`.
 
@@ -169,7 +200,8 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `application/` | 준비함: 관심 저장, 상태, 서류 체크리스트, 제출 서류 글 → 항목 쪼개기 |
 | `notification/` | 공고 변경 감지(`PolicyDiff`), 변경 이력·알림 저장(`PolicyChangeRecorder`), 알림함 API |
 | `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년·학교 장학 → 조건 변환, 맞춤 목록 API |
-| `common/ApiExceptionHandler` | 오류 응답 형식 통일 (`{message, errors}`) |
+| `auth/` | 이메일 가입·로그인, 카카오 로그인, 비밀번호 찾기, 토큰(`TokenService`), 로그인 전 데이터 옮기기(`AccountMergeService`), `@CurrentOwner`(토큰 또는 `X-Anonymous-Id`) |
+| `common/ApiExceptionHandler` | 오류 응답 형식 통일 (`{message, errors, code}`) |
 | `common/WebConfig`, `AdminKeyInterceptor` | CORS 허용 주소, API 문서 제목, 관리자 API 잠금 |
 | `resources/db/migration/` | Flyway SQL. JPA는 `validate`만 한다 |
 
@@ -331,10 +363,11 @@ unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정�
 
 **기능**
 - 글로 된 조건(`earnEtcCn`, `addAplyQlfcCndCn`, `ptcpPrpTrgtCn`)을 AI로 조건 나무로 바꾸기 — 판정 엔진은 같은 `Condition` 나무를 그대로 판정한다
-- 서류 마감·발급일 제한 같은 복수 일정(WF05), 알림 외부 발송(카톡·이메일), 로그인(현재 `X-Anonymous-Id` 임시)과 관리자 권한
+- 서류 마감·발급일 제한 같은 복수 일정(WF05), 알림 외부 발송(카톡·이메일), 카카오·이메일 계정 연결
 
 **운영**
 - 배포, CI
+- 배포 전: `JWT_SECRET` 넣기, Gmail 앱 비밀번호(`MAIL_*`) 넣기, 카카오 Client Secret 재발급, 카카오 콘솔·`KAKAO_REDIRECT_URIS`에 배포 주소 추가
 
 ## 참고 자료
 

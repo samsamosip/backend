@@ -1,7 +1,7 @@
 package com.youthbenefit.profile;
 
+import com.youthbenefit.auth.CurrentOwner;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -13,15 +13,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * 내 프로필 (WF01 온보딩, WF08 내 정보). 로그인이 생기기 전까지는 프론트가 만든 UUID 를
- * X-Anonymous-Id 헤더로 보내 사람을 구분한다(브라우저 localStorage 에 보관). TODO: 로그인으로 교체.
+ * 내 프로필 (WF01 온보딩, WF08 내 정보). 로그인했으면 Bearer 토큰의 계정, 아니면 프론트가 만든 UUID
+ * (X-Anonymous-Id 헤더, 브라우저 localStorage 보관)로 사람을 구분한다({@link CurrentOwner}).
  */
 @Tag(name = "내 프로필", description = "WF01 온보딩, WF08 내 정보")
 @RestController
@@ -29,13 +28,11 @@ import tools.jackson.databind.node.ObjectNode;
 @RequiredArgsConstructor
 public class ProfileController {
 
-	static final String ANONYMOUS_ID = "X-Anonymous-Id";
-
 	private final ProfileService profileService;
 
 	@Operation(summary = "내 프로필 조회", description = "만 나이, 시도 이름, 비어 있는 항목(missingFields) 포함. 없으면 404")
 	@GetMapping("/profile")
-	public ProfileResponse get(@Parameter(description = "브라우저가 처음 방문 때 만든 UUID (localStorage 보관)", example = "6f1c2b7e-1d1a-4c55-9a6b-0d6a3a1e2f00") @RequestHeader(ANONYMOUS_ID) UUID anonymousId) {
+	public ProfileResponse get(@CurrentOwner UUID anonymousId) {
 		return profileService.find(anonymousId)
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프로필이 아직 없습니다"));
 	}
@@ -43,7 +40,7 @@ public class ProfileController {
 	/** 전체 저장. 보내지 않은 항목은 "모름"으로 비워진다. */
 	@Operation(summary = "내 프로필 저장", description = "모든 항목 선택. 보내지 않은 항목은 모름(null)으로 저장. sbizCd 는 null(모름)과 [](해당 없음)을 구분한다. 코드값은 GET /api/v1/codes")
 	@PutMapping("/profile")
-	public ProfileResponse put(@Parameter(description = "브라우저가 처음 방문 때 만든 UUID (localStorage 보관)", example = "6f1c2b7e-1d1a-4c55-9a6b-0d6a3a1e2f00") @RequestHeader(ANONYMOUS_ID) UUID anonymousId,
+	public ProfileResponse put(@CurrentOwner UUID anonymousId,
 			@Valid @RequestBody ProfileRequest request) {
 		return profileService.save(anonymousId, request);
 	}
@@ -51,7 +48,7 @@ public class ProfileController {
 	/** 보낸 항목만 수정 (WF03 에서 부족한 정보 하나 입력, WF08 항목 하나 고치기). */
 	@Operation(summary = "내 프로필 일부 수정", description = "보낸 항목만 바뀐다. 보내지 않은 항목은 그대로, null 을 보내면 모름으로 비운다. 예: {\"annualIncome\": 2400}. 프로필이 없으면 새로 만든다")
 	@PatchMapping("/profile")
-	public ProfileResponse patch(@Parameter(description = "브라우저가 처음 방문 때 만든 UUID (localStorage 보관)", example = "6f1c2b7e-1d1a-4c55-9a6b-0d6a3a1e2f00") @RequestHeader(ANONYMOUS_ID) UUID anonymousId,
+	public ProfileResponse patch(@CurrentOwner UUID anonymousId,
 			@RequestBody ObjectNode changes) {
 		return profileService.patch(anonymousId, changes);
 	}
@@ -59,7 +56,7 @@ public class ProfileController {
 	/** 내 데이터 삭제 (WF08): 프로필과 준비함. */
 	@Operation(summary = "내 데이터 삭제", description = "프로필과 준비함을 모두 지운다")
 	@DeleteMapping
-	public ResponseEntity<Void> delete(@Parameter(description = "브라우저가 처음 방문 때 만든 UUID (localStorage 보관)", example = "6f1c2b7e-1d1a-4c55-9a6b-0d6a3a1e2f00") @RequestHeader(ANONYMOUS_ID) UUID anonymousId) {
+	public ResponseEntity<Void> delete(@CurrentOwner UUID anonymousId) {
 		if (!profileService.delete(anonymousId)) {
 			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "프로필이 아직 없습니다");
 		}

@@ -24,6 +24,24 @@ springdoc:
     path: /openapi.json
 
 app:
+  auth:
+    # 로그인 토큰 서명 키(32자 이상 아무 문자열). 비어 있으면 실행할 때마다 새로 만들어져 서버 재시작 시 모두 로그아웃된다
+    jwt-secret: ${JWT_SECRET:}
+    access-token-minutes: 30   # 출입증(accessToken)
+    refresh-token-days: 14     # 갱신 토큰 — 2주 동안 안 쓰면 다시 로그인
+    kakao:
+      # 카카오 디벨로퍼스 → 내 애플리케이션 → REST API 키 / 보안 → Client Secret
+      client-id: ${KAKAO_CLIENT_ID:}
+      client-secret: ${KAKAO_CLIENT_SECRET:}
+      # 프론트 콜백 주소. 카카오 콘솔의 Redirect URI 와 같아야 한다 (콤마로 구분)
+      redirect-uris: ${KAKAO_REDIRECT_URIS:http://localhost:5173/auth/kakao/callback}
+    mail:
+      # 인증 코드 메일. MAIL_USERNAME 이 비어 있으면 메일 대신 서버 로그에 코드를 찍는다(개발용)
+      host: ${MAIL_HOST:smtp.gmail.com}
+      port: ${MAIL_PORT:587}
+      username: ${MAIL_USERNAME:}
+      password: ${MAIL_PASSWORD:}   # Gmail 은 앱 비밀번호
+      from-name: 청년혜택 길잡이
   admin:
     # 관리자 API(/api/v1/admin/**) 키. 비어 있으면 잠그지 않는다(로컬 개발). 배포 서버에만 넣는다
     api-key: ${ADMIN_API_KEY:}

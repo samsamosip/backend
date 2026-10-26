@@ -1,8 +1,8 @@
 package com.youthbenefit.eligibility;
 
+import com.youthbenefit.auth.CurrentOwner;
 import com.youthbenefit.policy.PolicyRepository;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
@@ -10,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -30,8 +29,7 @@ public class EligibilityController {
 					+ "counts 는 verdict·includeNoMatch 와 상관없는 건수(category·closingWithinDays 는 반영). 카드마다 dDay(상시 모집은 null)")
 	@GetMapping("/api/v1/me/matches")
 	public MatchesResponse matches(
-			@Parameter(description = "브라우저 UUID. 없으면 빈 프로필로 판정") @RequestHeader(value = "X-Anonymous-Id",
-					required = false) UUID anonymousId,
+			@CurrentOwner(required = false) UUID anonymousId,
 			@RequestParam(required = false) String category, @RequestParam(required = false) Verdict verdict,
 			@RequestParam(defaultValue = "false") boolean includeNoMatch,
 			@RequestParam(required = false) Integer closingWithinDays, @RequestParam(defaultValue = "0") int page,
@@ -48,16 +46,14 @@ public class EligibilityController {
 			description = "비어 있는 내 정보마다 채우면 판정이 확정되는 공고 수. 효과 큰 순서. 첫 번째를 배너에 쓰면 된다. 다 채웠으면 빈 목록")
 	@GetMapping("/api/v1/me/suggestions")
 	public Suggestions suggestions(
-			@Parameter(description = "브라우저 UUID. 없으면 빈 프로필로 계산") @RequestHeader(value = "X-Anonymous-Id",
-					required = false) UUID anonymousId) {
+			@CurrentOwner(required = false) UUID anonymousId) {
 		return new Suggestions(eligibilityService.suggestions(anonymousId));
 	}
 
 	@Operation(summary = "공고 하나 판정", description = "조건마다 공고 요구사항, 내 값, 참/거짓/미확인, 근거를 준다")
 	@GetMapping("/api/v1/policies/{id}/eligibility")
 	public PolicyEligibility eligibility(@PathVariable Long id,
-			@Parameter(description = "브라우저 UUID. 없으면 빈 프로필로 판정") @RequestHeader(value = "X-Anonymous-Id",
-					required = false) UUID anonymousId) {
+			@CurrentOwner(required = false) UUID anonymousId) {
 		return policyRepository.findById(id)
 			.map(p -> eligibilityService.judge(p, eligibilityService.facts(anonymousId)))
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "공고를 찾을 수 없습니다: " + id));
