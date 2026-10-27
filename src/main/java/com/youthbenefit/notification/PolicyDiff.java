@@ -2,7 +2,6 @@ package com.youthbenefit.notification;
 
 import com.youthbenefit.eligibility.ConditionResult;
 import com.youthbenefit.eligibility.EligibilityService;
-import com.youthbenefit.eligibility.ProfileFacts;
 import com.youthbenefit.policy.Policy;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -81,7 +80,7 @@ public final class PolicyDiff {
 
 	private static Map<String, String> requirements(Policy p) {
 		Map<String, List<String>> byLabel = new LinkedHashMap<>();
-		for (ConditionResult c : EligibilityService.describe(p, ProfileFacts.empty())) {
+		for (ConditionResult c : EligibilityService.describeOriginal(p)) {
 			// 글로 된 조건의 요구 사항은 "원문 확인 필요"로 같아서 원문(evidence)을 비교한다
 			String text = c.requirement() != null && c.requirement().contains("원문 확인") ? c.evidence()
 					: c.requirement();

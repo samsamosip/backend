@@ -63,6 +63,13 @@ public class EligibilityService {
 		return ConditionEvaluator.evaluate(conditions(policy), facts).conditions();
 	}
 
+	/** AI 변환을 빼고 원래 조건으로 설명. 공고 변경 비교(PolicyDiff)용 */
+	public static List<ConditionResult> describeOriginal(Policy policy) {
+		Condition root = policy.getSource() == PolicySource.SCHOOL ? HarvesterConditions.from(policy)
+				: OntongConditions.original(policy);
+		return ConditionEvaluator.evaluate(root, ProfileFacts.empty()).conditions();
+	}
+
 	/** 출처마다 자격 정보 모양이 달라서 조건 나무를 만드는 곳이 다르다. 판정은 같은 엔진으로 한다. */
 	static Condition conditions(Policy policy) {
 		return policy.getSource() == PolicySource.SCHOOL ? HarvesterConditions.from(policy) : OntongConditions.from(policy);

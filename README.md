@@ -60,6 +60,8 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 | `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET` | (없음) | 카카오 디벨로퍼스 REST API 키, Client Secret. 없으면 카카오 로그인이 503 `KAKAO_NOT_CONFIGURED` |
 | `KAKAO_REDIRECT_URIS` | `http://localhost:5173/auth/kakao/callback` | 프론트 카카오 콜백 주소(콤마 구분). 카카오 콘솔 Redirect URI와 같아야 하고, 여기 없는 주소는 400 |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | (없음) | 인증 코드 메일(Gmail이면 보내는 주소와 앱 비밀번호, `MAIL_HOST`·`MAIL_PORT`로 바꿀 수 있음). **비우면 메일 대신 서버 로그에 코드를 찍는다(개발용)** |
+| `PWC_LLM_BASE_URL`, `PWC_LLM_API_KEY` | (없음) | PwC LLM 게이트웨이(OpenAI 방식). 글 조건 AI 변환에 쓴다. 주간 사용 한도가 있다. 없으면 변환 API가 503, 판정은 원래대로 |
+| `PWC_LLM_MODEL`, `PWC_LLM_REVIEW_MODEL` | `openai.gpt-4.1-mini`, `openai.gpt-4.1` | 1차 변환 모델, 애매한 것만 다시 보는 2차 모델. 이름 앞에 `openai.`가 붙는다(목록 API는 막혀 있음, 실측으로 확인: `openai.gpt-4o(-mini)`, `openai.gpt-4.1(-mini)`, `openai.gpt-5(-mini/-nano)`) |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000` | API를 부를 수 있는 프론트 주소(콤마 구분). 배포하면 프론트 주소를 추가 |
 | `DOCKER_COMPOSE_ENABLED` | `true` | Docker 없이 직접 띄운 PostgreSQL을 쓸 때 `false` |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | 로컬 기본값 | `DOCKER_COMPOSE_ENABLED=false`일 때 쓰는 접속 정보 |
@@ -109,6 +111,8 @@ docker compose up -d --no-build
 | `GET /api/v1/me/notifications/{id}` | 알림 상세. 종류에 따라 `changes`(바뀐 항목 전/후 `[{field, label, before, after}]`), `newPolicies`(`{total, policies: [{policyId, title, verdict, verdictLabel}]}`), `deadline`(`{applyEndDate, daysLeft}`) 중 하나. 열면 읽음 |
 | `POST /api/v1/me/notifications/read-all`, `DELETE /api/v1/me/notifications/{id}` | 모두 읽음, 알림 삭제 |
 | `GET`·`PUT /api/v1/me/notification-settings` | 알림 설정(WF05-b): `{newMatches, newMatchVerdicts: ["MATCH","NEEDS_CHECK"], deadline, deadlineDays: [7,3,1,0], changes, quietStart, quietEnd}`. 저장한 적 없으면 전부 켜짐. 방해금지 시간은 앱 밖 발송이 생기면 쓴다 |
+| `POST /api/v1/admin/ai/conditions?limit=50` | 글 조건 AI 변환: 신청 가능한 온통청년 공고 중 아직 안 했거나 글이 바뀐 것만. 결과 `{pending, converted, reviewed, failed, tokens}`. 정기 수집(`ONTONG_SYNC_SCHEDULED`) 뒤에도 자동으로 돈다 |
+| `POST /api/v1/admin/ai/conditions/recheck` | 검사 규칙을 고친 뒤 저장된 AI 답을 다시 검사 (AI 호출·비용 없음) |
 | `POST /api/v1/admin/notifications/run-daily` | 매일 알림(새 맞춤 공고·마감 임박) 지금 실행. 보통은 매일 아침 8시 자동 |
 | `GET /api/v1/policies/{id}/changes` | 공고 변경 이력(누구나) |
 | `DELETE /api/v1/me/applications/{id}` | 관심 해제 |
@@ -201,7 +205,8 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `code/OntongCodes`, `CodeController` | 공식 코드정의서의 사용자 선택 코드와 이름, 선택지 API |
 | `application/` | 준비함: 관심 저장, 상태, 서류 체크리스트, 제출 서류 글 → 항목 쪼개기, 서류 변경 반영(`ChecklistSync`), 공고 직접 등록(`CustomPolicyService`) |
 | `notification/` | 공고 변경 감지(`PolicyDiff`), 변경 이력·알림 저장(`PolicyChangeRecorder`), 알림함 API |
-| `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년·학교 장학 → 조건 변환, 맞춤 목록 API |
+| `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년·학교 장학 → 조건 변환, 글 조건 AI 변환(`AiConditionConverter`·`AiConditionService`), 맞춤 목록 API |
+| `ai/` | PwC LLM 게이트웨이 호출(`LlmClient`: JSON 모양 고정, 재시도 1번) |
 | `auth/` | 이메일 가입·로그인, 카카오 로그인, 비밀번호 찾기, 토큰(`TokenService`), 로그인 전 데이터 옮기기(`AccountMergeService`), `@CurrentOwner`(토큰 또는 `X-Anonymous-Id`) |
 | `common/ApiExceptionHandler` | 오류 응답 형식 통일 (`{message, errors, code}`) |
 | `common/WebConfig`, `AdminKeyInterceptor` | CORS 허용 주소, API 문서 제목, 관리자 API 잠금 |
@@ -301,6 +306,26 @@ unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정�
 | `eligible_universities` | 내 학교 이름 | "인하대"·"인하 대학교"도 같게 본다. "국내 4년제 대학"처럼 범위로 적힌 건 미확인 |
 | `residual_conditions_text` | 미확인(기타 자격 조건) | 실측상 거의 모든 장학에 있어 대부분 확인 필요로 나온다 |
 
+### 글 조건 AI 변환
+
+온통청년 글 조건(소득 기타 `earnEtcCn`, 추가 자격 `addAplyQlfcCndCn`, 참여 제한 `ptcpPrpTrgtCn`)은 원래 "원문 확인 필요"였다.
+PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_conditions`에 저장하고, 판정 때 원래 Unparsed 대신 쓴다(`eligibility/AiConditionConverter`).
+
+- **원칙: 틀린 "불일치"보다 "확인 필요"가 낫다.** 규칙은 "만족 못 하면 신청할 수 없는" 필수 조건만. AI 답은 그대로 믿지 않고 코드로 다시 검사해서 하나라도
+  안 맞으면 그 조건은 확인 필요로 남긴다. 확신이 낮거나 검사에서 떨어진 게 있으면 `openai.gpt-4.1`이 한 번 더 본다.
+- 규칙 변수: 나이, 거주 지역(이름 → 시도·시군구 코드), 본인 연소득, 가구 기준중위소득 %, 무주택, 주거 형태, 학력, 결혼 여부. 취업 상태는 말과 코드가 잘 안 맞아서 뺐다.
+- 검사(실데이터에서 나온 실수를 막는 것들, `AiConditionConverterTest`):
+  근거 구절이 원문에 그대로 있어야 함 / "연 매출"·"중위소득 %"를 연소득으로 읽지 않기 / "4~12세 아동", "생후 24개월"은 신청자 나이가 아님 /
+  규칙의 숫자가 근거에 있어야 함 / "또는·혹은·~거나·전입하고자·우대·한함·가산"이 근처에 있으면 필수 조건이 아님 / "대구 외 타지역", 학교·기관 소재지는 거주 조건이 아님 /
+  지역 이름·코드 이름이 근거에 있어야 함("미취업자"를 미혼으로 읽은 경우) / 참여 제한 글에서는 무주택만 / 유형별 기준이 여럿이면 가장 느슨한 값만, "소득 무관"이 있으면 소득 규칙 없음 /
+  "조건 없음"은 원문이 뻔히 빈 글("해당없음", "무관", "미정")일 때만(아니면 "트랙별 상이" 같은 글이 "조건 일치"로 잘못 나감)
+- 판정 화면의 근거는 "AI가 원문에서 읽음: …"으로 보여 준다. 변환할 때의 글 해시(`ai_conditions_hash`)가 지금 글과 다르면 쓰지 않고 원래대로 돌아간다.
+  공고 변경 비교(`PolicyDiff`)는 AI 없이 원래 조건으로 한다 — AI 결과가 붙은 걸 공고 변경으로 알리지 않게.
+- 모델 답 원문도 저장해서, 검사 규칙을 고치면 `/recheck`로 다시 검사한다(비용 없음). 프롬프트를 바꾸면 `PROMPT_VERSION`을 올린다(전부 다시 변환).
+- 실측(10/27, 신청 가능 1,226건 중 글 조건 있는 562건): 562건 변환, 실패 0, 약 125만 토큰(전부 다시 해도 몇 달러). 규칙이 생긴 공고 46건(규칙 56개),
+  글 조건이 다 풀려 끝까지 판정되는 공고 142건(그중 134건은 "해당없음" 같은 빈 글). 나머지 420건은 예술인·병역·창업 업력처럼 프로필로 못 보는 조건이라 확인 필요로 남는다.
+  예시 프로필 두 개에서 바뀐 판정 16건을 하나씩 확인 — 모두 맞음(부산 주거 지원 7건은 무주택·중위소득으로 불일치, 빈 글 5건은 일치).
+
 ### 학교 장학 수집
 
 - 목록(`/v1/opportunities`)은 요약만 주고 자격·기간·서류는 상세에 있다. 상세는 키당 분당 요청 한도가 있어서 필요한 것만 받는다.
@@ -374,7 +399,7 @@ unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정�
 - 공고 버전 이력(현재는 최신 값만 유지)
 
 **기능**
-- 글로 된 조건(`earnEtcCn`, `addAplyQlfcCndCn`, `ptcpPrpTrgtCn`)을 AI로 조건 나무로 바꾸기 — 판정 엔진은 같은 `Condition` 나무를 그대로 판정한다
+- 글 조건 AI 변환 2차: 학교 장학 `residual_conditions_text`, 프로필에 없는 변수(거주 기간, 재산, 병역 등) 추가 검토
 - 서류 마감·발급일 제한 같은 복수 일정(WF05), 알림 외부 발송(카톡·이메일), 카카오·이메일 계정 연결
 
 **운영**

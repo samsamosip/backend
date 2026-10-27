@@ -10,6 +10,7 @@ import com.youthbenefit.policy.Regions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 온통청년 공고의 자격 칸을 조건 나무로 바꾼다 (조건 JSON 명세 3번 "자격 조건 필드" 표).
@@ -28,7 +29,44 @@ public final class OntongConditions {
 	private OntongConditions() {
 	}
 
+	private static final JsonMapper JSON = JsonMapper.builder().build();
+
+	/**
+	 * 판정용 조건. 글 조건을 AI 로 바꾼 결과가 있고 그 뒤로 글이 안 바뀌었으면 그것을 쓰고, 아니면 글 조건은 "원문 확인 필요"로 둔다.
+	 */
 	public static Condition from(Policy p) {
+		AiConditions ai = ai(p);
+		if (ai == null) {
+			return original(p);
+		}
+		List<Condition> children = new ArrayList<>(structured(p).children());
+		for (AiConditions.Requirement r : ai.requirements()) {
+			children.add(new Check(r.var(), r.cmp(), r.values(), "AI가 원문에서 읽음: " + r.evidence()));
+		}
+		for (AiConditions.Unresolved u : ai.unresolved()) {
+			Unparsed unparsed = new Unparsed(u.label(), u.text());
+			children.add(u.exclusion() ? new Not(unparsed) : unparsed);
+		}
+		return new All(children);
+	}
+
+	/** AI 변환 없이 원래 방식. 공고 변경 비교(PolicyDiff)는 이것으로 한다 — AI 결과가 붙었다고 공고가 바뀐 건 아니라서. */
+	public static Condition original(Policy p) {
+		List<Condition> children = new ArrayList<>(structured(p).children());
+		if (INCOME_OTHER.equals(p.getEarnCndSeCd())) {
+			children.add(new Unparsed("소득 조건", p.getEarnEtcCn() != null ? p.getEarnEtcCn() : "소득 조건이 글로만 안내됨"));
+		}
+		if (p.getAddAplyQlfcCndCn() != null) {
+			children.add(new Unparsed("추가 자격 조건", p.getAddAplyQlfcCndCn()));
+		}
+		if (p.getPtcpPrpTrgtCn() != null) {
+			children.add(new Not(new Unparsed("참여 제한 대상", p.getPtcpPrpTrgtCn())));
+		}
+		return new All(children);
+	}
+
+	/** 칸으로 정리된 조건만 (나이, 지역, 연소득, 코드) */
+	static All structured(Policy p) {
 		List<Condition> children = new ArrayList<>();
 		age(p, children);
 		if (!p.isNationwide() && p.getZipCd() != null) {
@@ -41,13 +79,15 @@ public final class OntongConditions {
 		codes(children, "mrgSttsCd", p.getMrgSttsCd(), MARRIAGE_UNRESTRICTED, Cmp.IN);
 		codes(children, "plcyMajorCd", p.getPlcyMajorCd(), MAJOR_UNRESTRICTED, Cmp.IN);
 		codes(children, "sbizCd", p.getSbizCd(), SPECIAL_UNRESTRICTED, Cmp.INTERSECTS);
-		if (p.getAddAplyQlfcCndCn() != null) {
-			children.add(new Unparsed("추가 자격 조건", p.getAddAplyQlfcCndCn()));
-		}
-		if (p.getPtcpPrpTrgtCn() != null) {
-			children.add(new Not(new Unparsed("참여 제한 대상", p.getPtcpPrpTrgtCn())));
-		}
 		return new All(children);
+	}
+
+	/** 쓸 수 있는 AI 변환 결과. 없거나 그 뒤로 글이 바뀌었으면 null */
+	static AiConditions ai(Policy p) {
+		if (p.getAiConditions() == null || !AiConditionConverter.textHash(p).equals(p.getAiConditionsHash())) {
+			return null;
+		}
+		return JSON.readValue(p.getAiConditions(), AiConditions.class);
 	}
 
 	/** 최대 나이가 이 값 이상이면 상한이 없다는 뜻으로 본다 (실측: 99·100·120·999 가 "제한 없음" 대신 쓰임). */
@@ -82,9 +122,6 @@ public final class OntongConditions {
 				out.add(new Check("annualIncome", Cmp.GTE, List.of(String.valueOf(p.getEarnMinAmt())),
 						"earnMinAmt=" + p.getEarnMinAmt()));
 			}
-		}
-		else if (INCOME_OTHER.equals(p.getEarnCndSeCd())) {
-			out.add(new Unparsed("소득 조건", p.getEarnEtcCn() != null ? p.getEarnEtcCn() : "소득 조건이 글로만 안내됨"));
 		}
 	}
 

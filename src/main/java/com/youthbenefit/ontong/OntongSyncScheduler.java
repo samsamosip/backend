@@ -1,5 +1,7 @@
 package com.youthbenefit.ontong;
 
+import com.youthbenefit.ai.LlmClient;
+import com.youthbenefit.eligibility.AiConditionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -15,6 +17,10 @@ public class OntongSyncScheduler {
 
 	private final OntongSyncService syncService;
 
+	private final AiConditionService aiConditionService;
+
+	private final LlmClient llm;
+
 	@Scheduled(cron = "${ontong.sync.cron}", zone = "Asia/Seoul")
 	public void run() {
 		try {
@@ -22,6 +28,16 @@ public class OntongSyncScheduler {
 		}
 		catch (OntongApiException ex) {
 			log.error("온통청년 정기 수집 실패", ex);
+			return;
+		}
+		// 새로 들어왔거나 글이 바뀐 공고만 변환한다(바뀐 게 없으면 AI 호출 없음)
+		if (llm.configured()) {
+			try {
+				aiConditionService.convertPending(300);
+			}
+			catch (RuntimeException ex) {
+				log.error("글 조건 AI 변환 실패", ex);
+			}
 		}
 	}
 

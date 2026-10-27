@@ -109,6 +109,16 @@ public class Policy {
 	/** 직접 등록한 공고의 메모 */
 	private String memo;
 
+	/** 글로 된 자격 조건을 AI 로 바꾼 결과 JSON. {@code eligibility.AiConditions} 참고 */
+	@JdbcTypeCode(SqlTypes.JSON)
+	@Column(columnDefinition = "jsonb")
+	private String aiConditions;
+
+	/** 변환할 때의 글 해시. 지금 글과 다르면 쓰지 않는다 */
+	private String aiConditionsHash;
+
+	private LocalDateTime aiConvertedAt;
+
 	private LocalDateTime sourceModifiedAt;
 	private LocalDateTime sourceRegisteredAt;
 	private String rawHash;
@@ -208,6 +218,12 @@ public class Policy {
 		submissionDocuments = input.documentsText();
 		checklistDocuments = input.documentsJson();
 		sourceRegisteredAt = sourceRegisteredAt == null ? LocalDateTime.now() : sourceRegisteredAt;
+	}
+
+	public void applyAiConditions(String json, String hash) {
+		aiConditions = json;
+		aiConditionsHash = hash;
+		aiConvertedAt = LocalDateTime.now();
 	}
 
 	public boolean isCustom() {
