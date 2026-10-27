@@ -86,7 +86,8 @@ class EligibilityApiIntegrationTest {
 			.andExpect(jsonPath("$.verdictLabel").value("확인 필요"))
 			.andExpect(jsonPath("$.conditions[?(@.label == '지역')].truth").value(Matchers.contains("TRUE")))
 			.andExpect(jsonPath("$.conditions[?(@.label == '학력')].truth").value(Matchers.contains("TRUE")))
-			.andExpect(jsonPath("$.summary").value("추가 자격 조건 확인 필요"));
+			.andExpect(jsonPath("$.summary").value("추가 자격 조건 확인 필요"))
+			.andExpect(jsonPath("$.explanation").value("추가 자격 조건은 공고 원문에서 확인해 주세요"));
 	}
 
 	@Test

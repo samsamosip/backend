@@ -8,6 +8,7 @@ import com.youthbenefit.profile.UserProfileRepository;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -55,6 +56,7 @@ public class EligibilityService {
 			.distinct()
 			.toList();
 		return new PolicyEligibility(policy.getId(), verdict, verdict.label(), summary(verdict, evaluation),
+				explanation(verdict, evaluation),
 				evaluation.conditions(), missing);
 	}
 
@@ -175,6 +177,15 @@ public class EligibilityService {
 			.toList();
 	}
 
+	/** 받침이 있으면 "은", 없으면 "는" ("예술인은", "참여 제한 대상은") */
+	static String topicParticle(String word) {
+		char last = word.charAt(word.length() - 1);
+		if (last < 0xAC00 || last > 0xD7A3) {
+			return "은(는)";
+		}
+		return (last - 0xAC00) % 28 == 0 ? "는" : "은";
+	}
+
 	/** 받침이 있으면 "을", 없으면 "를" ("소득을", "학교를") */
 	static String objectParticle(String word) {
 		char last = word.charAt(word.length() - 1);
@@ -188,21 +199,72 @@ public class EligibilityService {
 		return items.stream().filter(m -> m.verdict() == verdict).count();
 	}
 
+	/**
+	 * 카드용 짧은 이유 (최종 디자인: "인천광역시 · 소득 정보 확인 필요"의 "·" 뒤). "나이·지역 조건 일치", "지역 조건 불일치",
+	 * "소득 정보 확인 필요"(프로필을 채우면 됨), "예술인 확인 필요"(공고를 봐야 함). 이름은 두 개까지, 더 있으면 "외 n".
+	 */
 	static String summary(Verdict verdict, ConditionEvaluator.Evaluation evaluation) {
 		List<ConditionResult> conditions = evaluation.conditions();
 		return switch (verdict) {
-			case MATCH -> conditions.isEmpty() ? "자격 제한이 없는 공고예요" : "입력한 조건이 모두 맞아요";
-			case NO_MATCH -> labels(conditions, Truth.FALSE) + " 조건이 맞지 않아요";
-			case NEEDS_CHECK -> labels(conditions, Truth.UNKNOWN) + " 확인 필요";
+			case MATCH -> conditions.isEmpty() ? "자격 제한 없음" : shortList(labels(conditions, Truth.TRUE, null)) + " 조건 일치";
+			case NO_MATCH -> shortList(labels(conditions, Truth.FALSE, null)) + " 조건 불일치";
+			case NEEDS_CHECK -> {
+				List<String> parts = new ArrayList<>();
+				List<String> missing = labels(conditions, Truth.UNKNOWN, true);
+				List<String> text = textOnly(conditions, missing);
+				if (!missing.isEmpty()) {
+					parts.add(shortList(missing) + " 정보");
+				}
+				if (!text.isEmpty()) {
+					parts.add(shortList(text));
+				}
+				yield String.join("·", parts) + " 확인 필요";
+			}
 		};
 	}
 
-	private static String labels(List<ConditionResult> conditions, Truth truth) {
+	/**
+	 * 상세용 한 문장: 무엇을 하면 되는지. 프로필에 없는 정보면 "입력하면 바로 확인돼요", 글로만 된 조건이면 "공고 원문에서 확인해 주세요".
+	 */
+	static String explanation(Verdict verdict, ConditionEvaluator.Evaluation evaluation) {
+		List<ConditionResult> conditions = evaluation.conditions();
+		return switch (verdict) {
+			case MATCH -> conditions.isEmpty() ? "자격 제한이 없는 공고예요" : "입력한 정보로는 모든 조건이 맞아요";
+			case NO_MATCH -> String.join("·", labels(conditions, Truth.FALSE, null)) + " 조건이 맞지 않아요";
+			case NEEDS_CHECK -> {
+				List<String> missingLabels = labels(conditions, Truth.UNKNOWN, true);
+				String missing = String.join("·", missingLabels);
+				String text = String.join("·", textOnly(conditions, missingLabels));
+				if (text.isEmpty()) {
+					yield missing + objectParticle(missing) + " 입력하면 바로 확인돼요";
+				}
+				String read = text + topicParticle(text) + " 공고 원문에서 확인해 주세요";
+				yield missing.isEmpty() ? read : missing + objectParticle(missing) + " 입력하고, " + read;
+			}
+		};
+	}
+
+	/**
+	 * @param fromProfile true 면 프로필을 채우면 풀리는 것만, false 면 글로만 된 조건만, null 이면 모두
+	 */
+	private static List<String> labels(List<ConditionResult> conditions, Truth truth, Boolean fromProfile) {
 		Set<String> labels = conditions.stream()
 			.filter(c -> c.truth() == truth)
+			.filter(c -> fromProfile == null || fromProfile == (c.missingField() != null))
 			.map(ConditionResult::label)
 			.collect(Collectors.toCollection(LinkedHashSet::new));
-		return String.join("·", labels);
+		return List.copyOf(labels);
+	}
+
+	/** 글로만 된 조건 이름 — 프로필로 풀리는 이름과 같으면 뺀다("전공 정보·전공" 처럼 두 번 나오지 않게) */
+	private static List<String> textOnly(List<ConditionResult> conditions, List<String> missing) {
+		return labels(conditions, Truth.UNKNOWN, false).stream().filter(l -> !missing.contains(l)).toList();
+	}
+
+	/** 카드에 들어가게 두 개까지: "소득·지역", "소득·지역 외 2" */
+	private static String shortList(List<String> labels) {
+		String head = String.join("·", labels.subList(0, Math.min(2, labels.size())));
+		return labels.size() > 2 ? head + " 외 " + (labels.size() - 2) : head;
 	}
 
 	private static LocalDate today() {

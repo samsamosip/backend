@@ -70,7 +70,8 @@ class EligibilityRulesTest {
 
 		assertThat(e.verdict()).isEqualTo(Verdict.MATCH);
 		assertThat(e.conditions()).isEmpty();
-		assertThat(e.summary()).isEqualTo("자격 제한이 없는 공고예요");
+		assertThat(e.summary()).isEqualTo("자격 제한 없음");
+		assertThat(e.explanation()).isEqualTo("자격 제한이 없는 공고예요");
 	}
 
 	@Test
@@ -92,7 +93,8 @@ class EligibilityRulesTest {
 
 		assertThat(e.verdict()).isEqualTo(Verdict.NEEDS_CHECK);
 		assertThat(e.missingFields()).containsExactly("annualIncome");
-		assertThat(e.summary()).isEqualTo("소득 확인 필요");
+		assertThat(e.summary()).isEqualTo("소득 정보 확인 필요");
+		assertThat(e.explanation()).isEqualTo("소득을 입력하면 바로 확인돼요");
 		assertThat(e.conditions().getFirst().requirement()).isEqualTo("연소득 5,000만원 이하");
 
 		assertThat(judge(policy("earnCndSeCd", "0043002", "earnMaxAmt", "5000"),
@@ -107,7 +109,8 @@ class EligibilityRulesTest {
 		PolicyEligibility e = judge(policy("zipCd", "51820", "earnCndSeCd", "0043002", "earnMaxAmt", "5000"));
 
 		assertThat(e.verdict()).isEqualTo(Verdict.NO_MATCH);
-		assertThat(e.summary()).isEqualTo("지역 조건이 맞지 않아요");
+		assertThat(e.summary()).isEqualTo("지역 조건 불일치");
+		assertThat(e.explanation()).isEqualTo("지역 조건이 맞지 않아요");
 	}
 
 	@Test
@@ -151,7 +154,8 @@ class EligibilityRulesTest {
 				"addAplyQlfcCndCn", "무주택자", "ptcpPrpTrgtCn", "기존 수혜자 제외"));
 
 		assertThat(e.verdict()).isEqualTo(Verdict.NEEDS_CHECK);
-		assertThat(e.summary()).isEqualTo("소득 조건·추가 자격 조건·참여 제한 대상 확인 필요");
+		assertThat(e.summary()).isEqualTo("소득 조건·추가 자격 조건 외 1 확인 필요");
+		assertThat(e.explanation()).isEqualTo("소득 조건·추가 자격 조건·참여 제한 대상은 공고 원문에서 확인해 주세요");
 		assertThat(e.conditions()).extracting(ConditionResult::evidence)
 			.containsExactly("가구 기준중위소득 60% 이하", "무주택자", "기존 수혜자 제외");
 		assertThat(e.conditions().getLast().requirement()).startsWith("해당하면 제외");

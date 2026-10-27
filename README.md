@@ -123,7 +123,7 @@ docker compose up -d --no-build
 | `POST /api/v1/me/custom-policies` | 공고 직접 등록(WF07 1차) `{title, organization, applyEndDate, applyEndTime: "18:00", category, memo, applyUrl, documents: ["재학증명서"], status}` — 공고명만 필수. 나만 보이는 공고가 생기고 준비함에 바로 담김(응답은 준비함 상세, `source: "USER"`). 판정 없음, D-day·마감 임박 알림·체크리스트는 됨 |
 | `PUT`·`DELETE /api/v1/me/custom-policies/{policyId}` | 직접 등록 공고 수정(보낸 값 전체로, 남은 서류의 체크는 유지)·삭제. 준비함에서 빼도 공고째 지워진다 |
 | `GET /api/v1/search?q=서울 사는 대학생 월세&includeNoMatch=&page=&size=` | 자연어 검색(WF06). 지금 신청 가능한 공고를 찾아 내 프로필로 판정. `understood`는 알아들은 조건(화면 칩): `keywords`(찾는 것 단어 묶음), `audience`(누구), `categories`, `region`, `age`, `closingSoon`, `ai`(false면 AI 없이 단어로 찾음). 기본은 불일치 제외. 결과가 없으면 `message`(WF06-b: "부산에서는 못 찾았어요. 지역을 빼면 n개 있어요") |
-| `GET /api/v1/policies/{id}/eligibility` | 공고 하나의 조건별 판정(WF03): 공고 요구사항, 내 값, 참/거짓/미확인, 근거, 채우면 다시 판정되는 항목 |
+| `GET /api/v1/policies/{id}/eligibility` | 공고 하나의 조건별 판정(WF03): 공고 요구사항, 내 값, 참/거짓/미확인, 근거, 채우면 다시 판정되는 항목. `summary`는 카드용 짧은 이유(최종 디자인 "기관 · 소득 정보 확인 필요"의 "·" 뒤: "나이·지역 조건 일치", "지역 조건 불일치", "소득 정보 확인 필요", "예술인 확인 필요"), `explanation`은 상세용 한 문장("소득을 입력하면 바로 확인돼요", "예술인은 공고 원문에서 확인해 주세요") |
 
 `/me` 경로는 로그인했으면 `Authorization: Bearer {accessToken}`, 아니면 `X-Anonymous-Id` 헤더(UUID)로 사람을 구분한다.
 프론트가 처음 방문 때 UUID를 만들어 localStorage에 두고 매 요청에 보낸다. 둘 다 없거나 UUID가 아니면 400.
