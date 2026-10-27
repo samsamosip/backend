@@ -119,6 +119,7 @@ docker compose up -d --no-build
 | `POST`·`PATCH`·`DELETE /api/v1/me/applications/{id}/items[/{itemId}]` | 서류 추가 `{"content"}` · 체크 `{"checked": true}`·이름 수정 · 삭제 |
 | `POST /api/v1/me/custom-policies` | 공고 직접 등록(WF07 1차) `{title, organization, applyEndDate, applyEndTime: "18:00", category, memo, applyUrl, documents: ["재학증명서"], status}` — 공고명만 필수. 나만 보이는 공고가 생기고 준비함에 바로 담김(응답은 준비함 상세, `source: "USER"`). 판정 없음, D-day·마감 임박 알림·체크리스트는 됨 |
 | `PUT`·`DELETE /api/v1/me/custom-policies/{policyId}` | 직접 등록 공고 수정(보낸 값 전체로, 남은 서류의 체크는 유지)·삭제. 준비함에서 빼도 공고째 지워진다 |
+| `GET /api/v1/search?q=서울 사는 대학생 월세&includeNoMatch=&page=&size=` | 자연어 검색(WF06). 지금 신청 가능한 공고를 찾아 내 프로필로 판정. `understood`는 알아들은 조건(화면 칩): `keywords`(찾는 것 단어 묶음), `audience`(누구), `categories`, `region`, `age`, `closingSoon`, `ai`(false면 AI 없이 단어로 찾음). 기본은 불일치 제외. 결과가 없으면 `message`(WF06-b: "부산에서는 못 찾았어요. 지역을 빼면 n개 있어요") |
 | `GET /api/v1/policies/{id}/eligibility` | 공고 하나의 조건별 판정(WF03): 공고 요구사항, 내 값, 참/거짓/미확인, 근거, 채우면 다시 판정되는 항목 |
 
 `/me` 경로는 로그인했으면 `Authorization: Bearer {accessToken}`, 아니면 `X-Anonymous-Id` 헤더(UUID)로 사람을 구분한다.
@@ -207,6 +208,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `notification/` | 공고 변경 감지(`PolicyDiff`), 변경 이력·알림 저장(`PolicyChangeRecorder`), 알림함 API |
 | `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년·학교 장학 → 조건 변환, 글 조건 AI 변환(`AiConditionConverter`·`AiConditionService`), 맞춤 목록 API |
 | `ai/` | PwC LLM 게이트웨이 호출(`LlmClient`: JSON 모양 고정, 재시도 1번) |
+| `search/` | 자연어 검색: 문장 해석(`QueryInterpreter`, AI·기억·단어 대체), 찾기·정렬(`SearchService`) |
 | `auth/` | 이메일 가입·로그인, 카카오 로그인, 비밀번호 찾기, 토큰(`TokenService`), 로그인 전 데이터 옮기기(`AccountMergeService`), `@CurrentOwner`(토큰 또는 `X-Anonymous-Id`) |
 | `common/ApiExceptionHandler` | 오류 응답 형식 통일 (`{message, errors, code}`) |
 | `common/WebConfig`, `AdminKeyInterceptor` | CORS 허용 주소, API 문서 제목, 관리자 API 잠금 |
@@ -325,6 +327,16 @@ PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_con
 - 실측(10/27, 신청 가능 1,226건 중 글 조건 있는 562건): 562건 변환, 실패 0, 약 125만 토큰(전부 다시 해도 몇 달러). 규칙이 생긴 공고 46건(규칙 56개),
   글 조건이 다 풀려 끝까지 판정되는 공고 142건(그중 134건은 "해당없음" 같은 빈 글). 나머지 420건은 예술인·병역·창업 업력처럼 프로필로 못 보는 조건이라 확인 필요로 남는다.
   예시 프로필 두 개에서 바뀐 판정 16건을 하나씩 확인 — 모두 맞음(부산 주거 지원 7건은 무주택·중위소득으로 불일치, 빈 글 5건은 일치).
+
+### 자연어 검색
+
+- AI(`openai.gpt-4.1-mini`)는 문장을 알아듣는 데만 쓰고, 공고는 코드가 찾는다(`search/`). 같은 문장은 해석을 기억(최근 500개)해서 두 번째부터 0.1초.
+  AI가 안 되면(키 없음·한도·오류) 띄어쓰기로 나눈 단어로 찾는다 — 검색이 멈추지 않게. 실측 1.2~2.5초(첫 요청 ~6초).
+- 해석: **찾는 것**(월세, 학원비, 창업)과 **누구**(대학생, 신혼부부)를 나눈다. 찾는 것 단어 묶음 하나는 공고에 나와야 하고, 누구는 점수만 더한다
+  (자격은 프로필 판정이 본다). 찾는 것 없이 상황만 말하면("결혼했는데 받을 수 있는 거") 누구로 찾는다. "지원", "청년" 같은 흔한 말은 뺀다.
+- 점수: 제목 3, 키워드·분류 2, 설명·지원 내용·자격 글 1. 지역을 말했으면 그 지역 공고 +2(전국 공고보다 앞). 분류·지역·나이·마감 임박은 거른다.
+- 정렬: 찾는 것 묶음이 몇 개 나왔나 → 점수 → 판정(일치·확인 필요·불일치) → 마감 임박.
+- 처음엔 "대학"이 "대학중점연구소"에 걸리거나 "지원"이 모든 공고에 걸려서 엉뚱한 공고가 위로 왔다 → 찾는 것/누구를 나누고 흔한 말을 빼서 고침.
 
 ### 학교 장학 수집
 
