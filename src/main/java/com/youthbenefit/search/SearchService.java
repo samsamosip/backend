@@ -47,14 +47,22 @@ public class SearchService {
 	/**
 	 * @param understood 알아들은 조건 (화면 칩)
 	 * @param message 결과가 없을 때 안내 (WF06-b), 있으면 null
+	 * @param notice AI 해석을 못 써서 단어로 찾았을 때 안내, 아니면 null
 	 */
 	public record SearchResponse(String query, SearchQuery understood, MatchesResponse.Counts counts,
-			List<MatchItem> content, int page, int size, long totalElements, int totalPages, String message) {
+			List<MatchItem> content, int page, int size, long totalElements, int totalPages, String message,
+			String notice) {
 	}
 
 	@Transactional(readOnly = true)
 	public SearchResponse search(UUID owner, String text, boolean includeNoMatch, int page, int size) {
-		SearchQuery query = interpreter.interpret(text);
+		return search(owner, text, includeNoMatch, page, size, true);
+	}
+
+	/** @param allowAi false 면 AI 없이(사용량 제한) */
+	@Transactional(readOnly = true)
+	public SearchResponse search(UUID owner, String text, boolean includeNoMatch, int page, int size, boolean allowAi) {
+		SearchQuery query = interpreter.interpret(text, allowAi);
 		LocalDate today = LocalDate.now(KST);
 		List<Policy> open = policyRepository.findOpen(today, Pageable.unpaged()).getContent();
 		ProfileFacts facts = eligibilityService.facts(owner);
@@ -83,7 +91,8 @@ public class SearchService {
 		int from = Math.min(page * size, shown.size());
 		int to = Math.min(from + size, shown.size());
 		return new SearchResponse(text, query, counts, shown.subList(from, to), page, size, shown.size(),
-				(shown.size() + size - 1) / size, shown.isEmpty() ? emptyMessage(open, query, today, ranked.size()) : null);
+				(shown.size() + size - 1) / size, shown.isEmpty() ? emptyMessage(open, query, today, ranked.size()) : null,
+				query.ai() ? null : "지금은 AI 검색을 쉬고 있어서 단어로 찾았어요");
 	}
 
 	/** 결과가 없을 때: 지역을 빼면 있는지, 불일치만 있는지 알려 준다 */

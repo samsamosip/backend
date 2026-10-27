@@ -62,6 +62,8 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | (없음) | 인증 코드 메일(Gmail이면 보내는 주소와 앱 비밀번호, `MAIL_HOST`·`MAIL_PORT`로 바꿀 수 있음). **비우면 메일 대신 서버 로그에 코드를 찍는다(개발용)** |
 | `PWC_LLM_BASE_URL`, `PWC_LLM_API_KEY` | (없음) | PwC LLM 게이트웨이(OpenAI 방식). 글 조건 AI 변환에 쓴다. 주간 사용 한도가 있다. 없으면 변환 API가 503, 판정은 원래대로 |
 | `PWC_LLM_MODEL`, `PWC_LLM_REVIEW_MODEL` | `openai.gpt-4.1-mini`, `openai.gpt-4.1` | 1차 변환 모델, 애매한 것만 다시 보는 2차 모델. 이름 앞에 `openai.`가 붙는다(목록 API는 막혀 있음, 실측으로 확인: `openai.gpt-4o(-mini)`, `openai.gpt-4.1(-mini)`, `openai.gpt-5(-mini/-nano)`) |
+| `PWC_LLM_DAILY_TOKEN_LIMIT` | `3000000` | 하루(한국 시간) AI 토큰 한도. 넘으면 다음 날까지 AI를 안 부른다(검색은 단어로, 변환은 다음 수집 때). 주간 $50 보호용. 0이면 제한 없음 |
+| `SEARCH_RATE_PER_MINUTE`, `SEARCH_RATE_PER_IP_PER_MINUTE`, `SEARCH_AI_PER_HOUR` | `30`, `300`, `30` | 검색 사용량 제한: 한 사람(IP+기기) 1분, 한 IP 전체(같은 와이파이) 1분 — 넘으면 429 `RATE_LIMITED`. 한 사람 1시간 AI 해석 수 — 넘으면 단어 검색(오류 아님, `notice`로 안내) |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000` | API를 부를 수 있는 프론트 주소(콤마 구분). 배포하면 프론트 주소를 추가 |
 | `DOCKER_COMPOSE_ENABLED` | `true` | Docker 없이 직접 띄운 PostgreSQL을 쓸 때 `false` |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | 로컬 기본값 | `DOCKER_COMPOSE_ENABLED=false`일 때 쓰는 접속 정보 |
@@ -352,6 +354,10 @@ PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_con
   (자격은 프로필 판정이 본다). 찾는 것 없이 상황만 말하면("결혼했는데 받을 수 있는 거") 누구로 찾는다. "지원", "청년" 같은 흔한 말은 뺀다.
 - 점수: 제목 3, 키워드·분류 2, 설명·지원 내용·자격 글 1. 지역을 말했으면 그 지역 공고 +2(전국 공고보다 앞). 분류·지역·나이·마감 임박은 거른다.
 - 정렬: 찾는 것 묶음이 몇 개 나왔나 → 점수 → 판정(일치·확인 필요·불일치) → 마감 임박.
+- **사용량 제한**(배포하면 누구나 검색할 수 있어서 PwC 주간 한도를 지키려고): 한 사람(IP+기기) 1분 30번 넘으면 429, 같은 IP 전체 1분 300번(행사장 와이파이처럼
+  여러 사람이 한 IP를 써도 막히지 않게 넉넉히), 한 사람 1시간 AI 해석 30번 넘으면 단어 검색으로(기억해 둔 문장은 그대로 AI 해석). 서버 전체 하루 토큰 한도
+  (`PWC_LLM_DAILY_TOKEN_LIMIT`)를 넘으면 모든 AI 기능이 다음 날까지 쉰다. 제한은 서버 메모리에서 센다(서버 한 대 기준, 다시 켜면 처음부터).
+  진짜 사용자 IP는 앞단 프록시(사설 IP)가 준 `X-Forwarded-For`로 본다(`server.forward-headers-strategy: native`).
 - 처음엔 "대학"이 "대학중점연구소"에 걸리거나 "지원"이 모든 공고에 걸려서 엉뚱한 공고가 위로 왔다 → 찾는 것/누구를 나누고 흔한 말을 빼서 고침.
 
 ### 학교 장학 수집

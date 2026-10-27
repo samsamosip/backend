@@ -41,13 +41,18 @@ public class QueryInterpreter {
 	});
 
 	public SearchQuery interpret(String text) {
+		return interpret(text, true);
+	}
+
+	/** @param allowAi false 면(사용량 제한) 기억해 둔 해석이 없을 때 단어로만 찾는다 */
+	public SearchQuery interpret(String text, boolean allowAi) {
 		String key = text.strip().replaceAll("\\s+", " ");
 		SearchQuery cached = cache.get(key);
 		if (cached != null) {
 			return cached;
 		}
 		SearchQuery query = null;
-		if (llm.configured()) {
+		if (allowAi && llm.configured() && !llm.overDailyLimit()) {
 			try {
 				query = parse(llm.json(llm.defaultModel(), SYSTEM, key, "search_query", SCHEMA));
 			}

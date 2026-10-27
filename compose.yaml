@@ -25,6 +25,7 @@ services:
       PWC_LLM_BASE_URL: '${PWC_LLM_BASE_URL:-}'
       PWC_LLM_API_KEY: '${PWC_LLM_API_KEY:-}'
       PWC_LLM_MODEL: '${PWC_LLM_MODEL:-openai.gpt-4.1-mini}'
+      PWC_LLM_DAILY_TOKEN_LIMIT: '${PWC_LLM_DAILY_TOKEN_LIMIT:-3000000}'
     ports:
       - '${APP_PORT:-8080}:8080'
     depends_on:

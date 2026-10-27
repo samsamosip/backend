@@ -30,9 +30,18 @@ public class LlmClient {
 
 	private final AtomicLong totalTokens = new AtomicLong();
 
-	public LlmClient(LlmProperties properties, RestClient.Builder builder, JsonMapper jsonMapper) {
+	private final java.time.Clock clock;
+
+	/** 오늘(한국 시간) 쓴 토큰 — 날짜가 바뀌면 0 부터 */
+	private java.time.LocalDate tokenDay;
+
+	private long tokensToday;
+
+	public LlmClient(LlmProperties properties, RestClient.Builder builder, JsonMapper jsonMapper,
+			java.time.Clock clock) {
 		this.properties = properties;
 		this.jsonMapper = jsonMapper;
+		this.clock = clock;
 		SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
 		factory.setConnectTimeout(Duration.ofSeconds(10));
 		factory.setReadTimeout(Duration.ofSeconds(properties.timeoutSeconds() > 0 ? properties.timeoutSeconds() : 90));
@@ -56,6 +65,29 @@ public class LlmClient {
 		return totalTokens.get();
 	}
 
+	/** 오늘 한도를 넘었는지 */
+	public synchronized boolean overDailyLimit() {
+		rollDay();
+		return properties.dailyTokenLimit() > 0 && tokensToday >= properties.dailyTokenLimit();
+	}
+
+	private synchronized void addTokens(long tokens) {
+		rollDay();
+		tokensToday += tokens;
+		totalTokens.addAndGet(tokens);
+	}
+
+	private void rollDay() {
+		java.time.LocalDate today = java.time.LocalDate.now(clock.withZone(java.time.ZoneId.of("Asia/Seoul")));
+		if (!today.equals(tokenDay)) {
+			if (tokenDay != null && tokensToday > 0) {
+				log.info("LLM 하루 사용량 {}: {} 토큰", tokenDay, tokensToday);
+			}
+			tokenDay = today;
+			tokensToday = 0;
+		}
+	}
+
 	/**
 	 * @param schema JSON Schema (strict: 모든 칸 required, additionalProperties false)
 	 * @return 모델이 낸 JSON
@@ -63,6 +95,9 @@ public class LlmClient {
 	public JsonNode json(String model, String system, String user, String schemaName, Map<String, Object> schema) {
 		if (!configured()) {
 			throw new LlmException("LLM 이 설정되지 않았어요 (PWC_LLM_BASE_URL, PWC_LLM_API_KEY)");
+		}
+		if (overDailyLimit()) {
+			throw new LlmException("오늘 AI 사용 한도(" + properties.dailyTokenLimit() + " 토큰)를 다 썼어요. 내일 다시 됩니다");
 		}
 		Map<String, Object> body = Map.of("model", model, "temperature", 0,
 				"messages", List.of(Map.of("role", "system", "content", system), Map.of("role", "user", "content", user)),
@@ -80,7 +115,7 @@ public class LlmClient {
 				if (response == null) {
 					throw new LlmException("빈 응답");
 				}
-				totalTokens.addAndGet(response.path("usage").path("total_tokens").asLong(0));
+				addTokens(response.path("usage").path("total_tokens").asLong(0));
 				String content = response.path("choices").path(0).path("message").path("content").asString(null);
 				if (content == null) {
 					throw new LlmException("응답에 내용이 없음");
