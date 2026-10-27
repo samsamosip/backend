@@ -119,6 +119,14 @@ public class Policy {
 
 	private LocalDateTime aiConvertedAt;
 
+	/** 지원 금액·한 줄 요약을 AI 로 뽑은 결과 JSON. {@link Support} 참고 */
+	@JdbcTypeCode(SqlTypes.JSON)
+	@Column(columnDefinition = "jsonb")
+	private String aiSupport;
+
+	/** 뽑을 때의 지원 내용 글 해시. 지금 글과 다르면 쓰지 않는다 */
+	private String aiSupportHash;
+
 	private LocalDateTime sourceModifiedAt;
 	private LocalDateTime sourceRegisteredAt;
 	private String rawHash;
@@ -224,6 +232,11 @@ public class Policy {
 		aiConditions = json;
 		aiConditionsHash = hash;
 		aiConvertedAt = LocalDateTime.now();
+	}
+
+	public void applyAiSupport(String json, String hash) {
+		aiSupport = json;
+		aiSupportHash = hash;
 	}
 
 	public boolean isCustom() {

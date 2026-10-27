@@ -18,12 +18,13 @@ public record PolicySummaryResponse(
 		LocalDate applyStartDate,
 		LocalDate applyEndDate,
 		boolean nationwide,
-		List<String> regions) {
+		List<String> regions,
+		Support support) {
 
 	public static PolicySummaryResponse from(Policy p) {
 		return new PolicySummaryResponse(p.getId(), p.getSource(), p.getTitle(), p.getDescription(),
 				PolicyResponse.split(p.getCategoryGroup()), p.getOrganization(), p.getApplyPeriodCode(),
-				p.getApplyStartDate(), p.getApplyEndDate(), p.isNationwide(), PolicyResponse.regions(p));
+				p.getApplyStartDate(), p.getApplyEndDate(), p.isNationwide(), PolicyResponse.regions(p), Support.of(p));
 	}
 
 }

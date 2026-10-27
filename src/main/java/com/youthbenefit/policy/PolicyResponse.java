@@ -34,7 +34,8 @@ public record PolicyResponse(
 		String referenceUrl1,
 		String submissionDocuments,
 		@JsonFormat(pattern = "HH:mm") LocalTime applyEndTime,
-		String memo) {
+		String memo,
+		Support support) {
 
 	public static PolicyResponse from(Policy p) {
 		return new PolicyResponse(p.getId(), p.getSource(), p.getTitle(), p.getDescription(),
@@ -42,7 +43,7 @@ public record PolicyResponse(
 				p.getApplyStartDate(), p.getApplyEndDate(), p.isNationwide(), regions(p),
 				p.getSprtTrgtMinAge(), p.getSprtTrgtMaxAge(), p.getZipCd(), p.getEarnCndSeCd(), p.getEarnMaxAmt(),
 				p.getJobCd(), p.getSchoolCd(), p.getMrgSttsCd(), p.getPlcyMajorCd(), p.getSbizCd(), p.getApplyUrl(),
-				p.getReferenceUrl1(), p.getSubmissionDocuments(), p.getApplyEndTime(), p.getMemo());
+				p.getReferenceUrl1(), p.getSubmissionDocuments(), p.getApplyEndTime(), p.getMemo(), Support.of(p));
 	}
 
 	static List<String> regions(Policy p) {

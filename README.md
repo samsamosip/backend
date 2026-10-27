@@ -112,6 +112,7 @@ docker compose up -d --no-build
 | `POST /api/v1/me/notifications/read-all`, `DELETE /api/v1/me/notifications/{id}` | 모두 읽음, 알림 삭제 |
 | `GET`·`PUT /api/v1/me/notification-settings` | 알림 설정(WF05-b): `{newMatches, newMatchVerdicts: ["MATCH","NEEDS_CHECK"], deadline, deadlineDays: [7,3,1,0], changes, quietStart, quietEnd}`. 저장한 적 없으면 전부 켜짐. 방해금지 시간은 앱 밖 발송이 생기면 쓴다 |
 | `POST /api/v1/admin/ai/conditions?limit=50` | 글 조건 AI 변환: 신청 가능한 온통청년 공고 중 아직 안 했거나 글이 바뀐 것만. 결과 `{pending, converted, reviewed, failed, tokens}`. 정기 수집(`ONTONG_SYNC_SCHEDULED`) 뒤에도 자동으로 돈다 |
+| `POST /api/v1/admin/ai/support?limit=50`, `/recheck` | 지원 금액·한 줄 요약 AI 뽑기 / 저장된 답 다시 검사(비용 없음). 정기 수집 뒤에도 자동 |
 | `POST /api/v1/admin/ai/conditions/recheck` | 검사 규칙을 고친 뒤 저장된 AI 답을 다시 검사 (AI 호출·비용 없음) |
 | `POST /api/v1/admin/notifications/run-daily` | 매일 알림(새 맞춤 공고·마감 임박) 지금 실행. 보통은 매일 아침 8시 자동 |
 | `GET /api/v1/policies/{id}/changes` | 공고 변경 이력(누구나) |
@@ -208,6 +209,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `notification/` | 공고 변경 감지(`PolicyDiff`), 변경 이력·알림 저장(`PolicyChangeRecorder`), 알림함 API |
 | `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년·학교 장학 → 조건 변환, 글 조건 AI 변환(`AiConditionConverter`·`AiConditionService`), 맞춤 목록 API |
 | `ai/` | PwC LLM 게이트웨이 호출(`LlmClient`: JSON 모양 고정, 재시도 1번) |
+| `support/` | 지원 금액·한 줄 요약 AI 뽑기(`AiSupportExtractor`·`AiSupportService`). 카드 표시는 `policy/Support` |
 | `search/` | 자연어 검색: 문장 해석(`QueryInterpreter`, AI·기억·단어 대체), 찾기·정렬(`SearchService`) |
 | `auth/` | 이메일 가입·로그인, 카카오 로그인, 비밀번호 찾기, 토큰(`TokenService`), 로그인 전 데이터 옮기기(`AccountMergeService`), `@CurrentOwner`(토큰 또는 `X-Anonymous-Id`) |
 | `common/ApiExceptionHandler` | 오류 응답 형식 통일 (`{message, errors, code}`) |
@@ -327,6 +329,20 @@ PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_con
 - 실측(10/27, 신청 가능 1,226건 중 글 조건 있는 562건): 562건 변환, 실패 0, 약 125만 토큰(전부 다시 해도 몇 달러). 규칙이 생긴 공고 46건(규칙 56개),
   글 조건이 다 풀려 끝까지 판정되는 공고 142건(그중 134건은 "해당없음" 같은 빈 글). 나머지 420건은 예술인·병역·창업 업력처럼 프로필로 못 보는 조건이라 확인 필요로 남는다.
   예시 프로필 두 개에서 바뀐 판정 16건을 하나씩 확인 — 모두 맞음(부산 주거 지원 7건은 무주택·중위소득으로 불일치, 빈 글 5건은 일치).
+
+### 지원 금액 (카드의 "월 최대 20만원")
+
+모든 공고 응답(목록·맞춤·검색 카드, 상세)에 `support`가 붙는다:
+`{label: "월 최대 30만원" | null, amountWon, period: MONTH|YEAR|SEMESTER|ONCE|TOTAL, upTo, kind: CASH|LOAN|INTEREST|VOUCHER|SERVICE|OTHER, summary: "창업 교육·컨설팅", source: SCHOOL|AI|TEXT}`.
+화면은 `label`이 있으면 금액, 없으면 `summary`를 보여 주면 된다.
+
+- 학교 장학: Harvester가 정리한 금액(`benefits.amount_max`, 지급 주기) — "학기당 350만원", "등록금 전액", 학자금 대출은 "대출 연 최대 200만원"
+- 온통청년: 지원 내용 글에서 AI(`openai.gpt-4.1-mini`)가 1인당 받는 금액·주기·한 줄 요약을 뽑고 코드가 검사(`support/AiSupportExtractor`):
+  금액이 근거 구절에 실제로 적혀 있어야 하고(한국어 금액 읽기 `Support.amounts`: "5백만원", "1.8백만원", "40,000천원", "1.5억원"), 근거는 원문에 있어야 하고,
+  사업 예산·기업 지원액·보험 보장 한도는 버린다. 근거에 금액이 하나뿐인데 AI 숫자가 다르면 원문 숫자를 쓴다("연60백만원"을 600만원으로 읽은 경우).
+  이자 지원은 "2억원 한도 이자 지원"(대출 원금 한도라서), 바우처는 "20만원 상당".
+- 지원 내용이 바뀌면(`ai_support_hash`) 옛 결과는 안 쓰고 첫 줄로 돌아간 뒤 다시 뽑는다.
+- 실측(10/27): 신청 가능 온통청년 1,213건 모두 뽑음, 실패 0, 약 86만 토큰. 금액 332건, 한 줄 요약 1,211건. 무작위 40건·5천만원 이상 18건 수동 확인.
 
 ### 자연어 검색
 
