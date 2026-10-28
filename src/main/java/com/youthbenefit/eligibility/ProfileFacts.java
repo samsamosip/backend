@@ -41,7 +41,10 @@ public final class ProfileFacts {
 		put(v, "annualIncome", p.getAnnualIncome());
 		put(v, "householdMedianIncomePct", p.getHouseholdMedianIncomePct());
 		put(v, "housingType", p.getHousingType() == null ? null : p.getHousingType().name());
-		put(v, "homeowner", p.getHomeowner() == null ? null : p.getHomeowner().toString());
+		// 화면에 "주택 소유" 질문이 없어서(최종 디자인 01) 주거 형태가 자가면 집이 있는 것으로 본다. 월세·전세라도 다른 집이 있을 수 있어 모름으로 둔다
+		Boolean homeowner = p.getHomeowner() != null ? p.getHomeowner()
+				: p.getHousingType() == com.youthbenefit.profile.HousingType.OWN ? Boolean.TRUE : null;
+		put(v, "homeowner", homeowner == null ? null : homeowner.toString());
 		put(v, "schoolName", p.getSchoolName());
 		put(v, "enrollmentStatus", p.getEnrollmentStatus() == null ? null : p.getEnrollmentStatus().name());
 		put(v, "gradeLevel", p.getGradeLevel());

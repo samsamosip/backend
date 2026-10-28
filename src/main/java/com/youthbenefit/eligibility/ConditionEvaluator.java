@@ -57,10 +57,20 @@ public final class ConditionEvaluator {
 				Truth shown = negated ? t.not() : t;
 				out.add(new ConditionResult(LABELS.getOrDefault(check.var(), check.var()), shown,
 						(negated ? "제외: " : "") + describe(check), mine == null ? null : describeValue(check.var(), mine),
-						mine == null ? check.var() : null, check.evidence()));
+						mine == null && askable(check.var()) ? check.var() : null, check.evidence()));
 				yield t;
 			}
 		};
+	}
+
+	/**
+	 * 화면에서 입력받지 않는 항목. 모를 때 "입력하면 확인돼요" 대신 "공고 원문에서 확인"으로 안내한다. 가구 기준중위소득 %는 팀 결정(10/28)으로
+	 * 받지 않고 본인 연소득만 받는다. 주택 소유도 화면에 질문이 없다(주거 형태가 자가면 소유로 본다, {@link ProfileFacts}).
+	 */
+	static final java.util.Set<String> NOT_ASKED = java.util.Set.of("householdMedianIncomePct", "homeowner");
+
+	static boolean askable(String var) {
+		return !NOT_ASKED.contains(var);
 	}
 
 	static Truth compare(Check c, Object mine) {

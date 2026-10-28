@@ -263,6 +263,10 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 
 ### 사용자 프로필
 
+- 소득은 **본인 연소득(만원) 숫자 입력**만 받는다(10/28 팀 결정). 가구 기준중위소득 %·주택 소유는 화면에서 받지 않아서, 그 조건을 모를 때는
+  "입력하면 확인돼요" 대신 "공고 원문에서 확인해 주세요"로 안내하고 홈 배너·`missingFields`에도 넣지 않는다(`ConditionEvaluator.NOT_ASKED`).
+  주거 형태가 자가(OWN)면 주택 소유로 본다.
+
 - 변수는 "조건 JSON 명세" v0.1을 따른다. 온통청년에 있는 조건은 온통청년 이름·코드 그대로(`zipCd`, `jobCd`, `schoolCd`,
   `mrgSttsCd`, `plcyMajorCd`, `sbizCd`), 없는 것만 새 이름(`birthDate`→`age`, `annualIncome`, `householdMedianIncomePct`,
   `housingType`, `homeowner`, `actualZipCd`).
