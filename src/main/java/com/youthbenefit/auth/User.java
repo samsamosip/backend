@@ -94,10 +94,6 @@ public class User {
 		return false;
 	}
 
-	int remainingAttempts() {
-		return MAX_FAILED_LOGINS - failedLoginCount;
-	}
-
 	void recordSuccessfulLogin() {
 		failedLoginCount = 0;
 		lockedUntil = null;

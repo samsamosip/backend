@@ -124,9 +124,13 @@ public class AuthService {
 	public Tokens login(String rawEmail, String password, UUID anonymousId) {
 		LocalDateTime now = LocalDateTime.now();
 		User user = users.findByEmail(normalizeEmail(rawEmail)).orElse(null);
+		// 너무 긴 비밀번호는 암호화 비교가 오류를 내서 그냥 틀린 것으로
+		if (password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+			throw badCredentials();
+		}
 		if (user == null || user.getPasswordHash() == null) {
 			encoder.matches(password, DUMMY_HASH);
-			throw badCredentials(null);
+			throw badCredentials();
 		}
 		if (user.isLocked(now)) {
 			throw locked(user, now);
@@ -135,7 +139,7 @@ public class AuthService {
 			if (user.recordFailedLogin(now)) {
 				throw locked(user, now);
 			}
-			throw badCredentials(user.remainingAttempts());
+			throw badCredentials();
 		}
 		if (!user.isEmailVerified()) {
 			throw new ApiException(HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED", "이메일 인증이 필요해요. 메일로 받은 코드를 입력해 주세요.");
@@ -328,8 +332,15 @@ public class AuthService {
 		}
 	}
 
+	/** 비밀번호 암호화(BCrypt)가 받는 최대 길이. 한글은 한 글자에 3바이트라 24자 남짓이면 넘는다 */
+	static final int MAX_PASSWORD_BYTES = 72;
+
 	/** 8~64자, 영문과 숫자를 함께. 특수문자는 써도 되고 안 써도 된다. */
 	static void checkPassword(Map<String, String> errors, String field, String password) {
+		if (password != null && password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+			errors.put(field, "비밀번호가 너무 길어요. 영문·숫자 기준 72자, 한글은 24자 정도까지 쓸 수 있어요");
+			return;
+		}
 		if (password == null || password.length() < 8 || password.length() > 64 || !HAS_LETTER.matcher(password).find()
 				|| !HAS_DIGIT.matcher(password).find()) {
 			errors.put(field, "8자 이상, 영문과 숫자를 함께 써 주세요 (특수문자 사용 가능)");
@@ -345,9 +356,9 @@ public class AuthService {
 		return n.length() <= 10 ? n : n.substring(0, 10);
 	}
 
-	private static ApiException badCredentials(Integer remaining) {
-		String suffix = remaining == null ? "" : " (남은 횟수 " + remaining + "번)";
-		return new ApiException(HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "이메일 또는 비밀번호가 맞지 않아요." + suffix);
+	/** 가입한 주소인지 알 수 없게 늘 같은 문구 (남은 횟수를 보여 주면 가입한 주소만 숫자가 붙어서 가입 여부가 드러났다) */
+	private static ApiException badCredentials() {
+		return new ApiException(HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "이메일 또는 비밀번호가 맞지 않아요.");
 	}
 
 	/** 화면(08-b)에 "15:57 이후", "14분 32초 후"를 보여 줄 수 있게 풀리는 시각과 남은 초를 같이 준다 */

@@ -20,6 +20,13 @@ server:
   # 앞단 프록시(사설 IP)가 준 X-Forwarded-For 로 진짜 사용자 IP 를 본다 (검색 사용량 제한). 바깥에서 보낸 헤더는 무시
   forward-headers-strategy: native
 
+management:
+  endpoints:
+    web:
+      # /actuator/health 만 연다(서버 상태 확인용). 목록 화면(/actuator)은 숨긴다
+      discovery:
+        enabled: false
+
 springdoc:
   swagger-ui:
     path: /docs              # API 문서 화면: http://localhost:8080/docs

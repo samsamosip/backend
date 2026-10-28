@@ -95,10 +95,17 @@ public class ApiExceptionHandler {
 		return "값의 형식이 맞지 않습니다";
 	}
 
-	@ExceptionHandler({ MissingRequestHeaderException.class, MethodArgumentTypeMismatchException.class })
+	@ExceptionHandler(MissingRequestHeaderException.class)
 	@ResponseStatus(HttpStatus.BAD_REQUEST)
-	public ErrorResponse header(Exception ex) {
-		return new ErrorResponse("X-Anonymous-Id 헤더에 UUID 를 넣어 주세요.", Map.of());
+	public ErrorResponse header(MissingRequestHeaderException ex) {
+		return new ErrorResponse(ex.getHeaderName() + " 헤더가 필요합니다.", Map.of());
+	}
+
+	/** 주소나 검색 조건의 값 형식이 틀림 (예: /policies/abc) */
+	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	public ErrorResponse typeMismatch(MethodArgumentTypeMismatchException ex) {
+		return new ErrorResponse("입력값을 확인해 주세요.", Map.of(ex.getName(), reason(ex.getRequiredType())));
 	}
 
 }

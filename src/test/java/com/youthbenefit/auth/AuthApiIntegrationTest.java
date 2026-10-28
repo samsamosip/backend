@@ -156,7 +156,8 @@ class AuthApiIntegrationTest {
 			.andExpect(jsonPath("$.code").value("BAD_CREDENTIALS"));
 		for (int left = 4; left >= 1; left--) {
 			login("lock@example.com", "wrong1pass").andExpect(status().isUnauthorized())
-				.andExpect(jsonPath("$.message").value("이메일 또는 비밀번호가 맞지 않아요. (남은 횟수 " + left + "번)"));
+				// 가입 여부가 드러나지 않게 남은 횟수는 보여 주지 않는다
+				.andExpect(jsonPath("$.message").value("이메일 또는 비밀번호가 맞지 않아요."));
 		}
 		login("lock@example.com", "wrong1pass").andExpect(status().isLocked())
 			.andExpect(jsonPath("$.code").value("ACCOUNT_LOCKED"));
@@ -165,6 +166,14 @@ class AuthApiIntegrationTest {
 			.andExpect(jsonPath("$.details.lockedUntil").isNotEmpty())
 			.andExpect(jsonPath("$.details.retryAfterSeconds").value(org.hamcrest.Matchers.greaterThan(800)))
 			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("이후에 다시 시도")));
+	}
+
+	@Test
+	void veryLongPasswordIsRejectedNotCrashing() throws Exception {
+		// 한글은 한 글자 3바이트라 BCrypt 72바이트를 넘는다 (예전엔 500)
+		signup("long@example.com", "가".repeat(60) + "a1", "긴비번").andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.errors.password").value(org.hamcrest.Matchers.containsString("너무 길어요")));
+		login("long@example.com", "가".repeat(60) + "a1").andExpect(status().isUnauthorized());
 	}
 
 	@Test

@@ -55,7 +55,7 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 | `NOTIFICATIONS_DAILY` | `true` | 매일 아침 8시 새 맞춤 공고·마감 임박 알림 생성(`notifications.daily.cron`). `false`면 끈다 |
 | `HARVESTER_BASE_URL`, `HARVESTER_API_KEY` | (없음) | policy-harvester API. 관리자 화면 API key 메뉴에서 발급(90일 만료). 없으면 학교 장학 수집 API가 502 |
 | `HARVESTER_SYNC_SCHEDULED` | `false` | `true`면 매일 새벽 4시 학교 장학 자동 수집(`harvester.sync.cron`, Asia/Seoul) |
-| `ADMIN_API_KEY` | (없음) | 관리자 API(`/api/v1/admin/**`) 키. 넣으면 `X-Admin-Key` 헤더가 같아야만 호출된다(틀리면 401). **로컬 개발에서는 비워 두고 배포 서버에만 넣는다** |
+| `ADMIN_API_KEY` | (없음) | 관리자 API(`/api/v1/admin/**`) 키. 넣으면 `X-Admin-Key` 헤더가 같아야만 호출된다(틀리면 401). 비워 두면 **서버 자신(127.0.0.1)에서 온 요청만** 통과(밖에서는 403). 배포 서버에는 꼭 넣는다 |
 | `JWT_SECRET` | (없음) | 로그인 토큰 서명 키(32자 이상 아무 문자열). 비우면 실행할 때마다 새 키라 서버를 다시 켜면 모두 로그아웃된다. **배포 서버에는 꼭 넣는다** |
 | `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET` | (없음) | 카카오 디벨로퍼스 REST API 키, Client Secret. 없으면 카카오 로그인이 503 `KAKAO_NOT_CONFIGURED` |
 | `KAKAO_REDIRECT_URIS` | `http://localhost:5173/auth/kakao/callback` | 프론트 카카오 콜백 주소(콤마 구분). 카카오 콘솔 Redirect URI와 같아야 하고, 여기 없는 주소는 400 |
@@ -190,6 +190,17 @@ curl -X PUT localhost:8080/api/v1/me/profile \
 ```
 
 잘못된 값은 항목별 이유와 함께 400으로 돌려준다: `{"message":"입력값을 확인해 주세요.","errors":{"jobCd":"알 수 없는 코드: 0013010"}}`
+
+## 보안 점검 (10/28)
+
+실제로 공격하듯 시험했다(로컬 서버).
+
+- 막힘: 남의 준비함·직접 등록 공고·서류 체크 보기·고치기·지우기(404), 토큰 위조(서명 없음, 계정 번호 바꾸기 → 401), 계정 UUID를 익명 헤더로(401)
+- 고친 것: 관리자 키를 안 넣으면 누구나 관리자 API를 부를 수 있었음 → 서버 자신만 / 로그인 실패 문구의 "남은 횟수"로 가입 여부가 드러남 → 같은 문구 /
+  한글로 긴 비밀번호(72바이트 넘음)에 500 → "너무 길어요" / `/actuator` 목록 노출 → 숨김(health만) / 주소 값 형식 오류에 엉뚱한 문구 → 칸 이름과 이유
+- 그대로 둔 것: 가입 화면의 "이미 가입된 이메일"(대부분의 서비스가 그렇게 하고 가입은 횟수 제한이 있음), 로그아웃·비밀번호 변경 뒤에도 이미 받은 출입증은 최대 30분 유효
+- 프론트가 지킬 것: 카카오 로그인에 `state` 값을 만들어 콜백에서 같은지 확인(다른 사이트가 로그인시키는 것 막기), 메모·공고 글은 HTML 로 넣지 말고 글자로 보여 주기
+- 배포 때: 앞단 프록시가 사설 IP가 아니면 `server.tomcat.remoteip.internal-proxies`를 그 주소로 맞춰야 진짜 사용자 IP로 횟수 제한이 걸린다(안 맞추면 모두가 한 IP로 보임)
 
 ## 속도
 
