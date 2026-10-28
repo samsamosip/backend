@@ -40,6 +40,13 @@ public final class OntongConditions {
 			return original(p);
 		}
 		List<Condition> children = new ArrayList<>(structured(p).children());
+		children.addAll(aiChildren(ai));
+		return new All(children);
+	}
+
+	/** AI 변환 결과 → 조건들 (규칙은 비교로, 못 바꾼 것은 원문 확인 필요로) */
+	static List<Condition> aiChildren(AiConditions ai) {
+		List<Condition> children = new ArrayList<>();
 		for (AiConditions.Requirement r : ai.requirements()) {
 			children.add(new Check(r.var(), r.cmp(), r.values(), "AI가 원문에서 읽음: " + r.evidence()));
 		}
@@ -47,7 +54,7 @@ public final class OntongConditions {
 			Unparsed unparsed = new Unparsed(u.label(), u.text());
 			children.add(u.exclusion() ? new Not(unparsed) : unparsed);
 		}
-		return new All(children);
+		return children;
 	}
 
 	/** AI 변환 없이 원래 방식. 공고 변경 비교(PolicyDiff)는 이것으로 한다 — AI 결과가 붙었다고 공고가 바뀐 건 아니라서. */

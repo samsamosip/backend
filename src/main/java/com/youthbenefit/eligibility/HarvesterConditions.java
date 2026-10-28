@@ -36,7 +36,33 @@ public final class HarvesterConditions {
 	private HarvesterConditions() {
 	}
 
+	/**
+	 * 판정용 조건. 기타 자격 조건 글을 AI 로 바꾼 결과가 있고 그 뒤로 글이 안 바뀌었으면 그것을 쓰고({@link OntongConditions#from} 과
+	 * 같은 방식), 아니면 글은 "원문 확인 필요"로 둔다.
+	 */
 	public static Condition from(Policy p) {
+		AiConditions ai = OntongConditions.ai(p);
+		if (ai == null) {
+			return original(p);
+		}
+		List<Condition> children = new ArrayList<>(structured(p).children());
+		children.addAll(OntongConditions.aiChildren(ai));
+		return new All(children);
+	}
+
+	/** AI 변환 없이 원래 방식 (공고 변경 비교용) */
+	public static Condition original(Policy p) {
+		All structured = structured(p);
+		List<Condition> children = new ArrayList<>(structured.children());
+		String residual = residual(p);
+		if (residual != null) {
+			children.add(new Unparsed("기타 자격 조건", residual));
+		}
+		return new All(children);
+	}
+
+	/** 정리된 칸으로만 만든 조건 (기타 자격 조건 글 빼고) */
+	static All structured(Policy p) {
 		JsonNode e = JSON.readTree(p.getRawPayload()).path("eligibility");
 		if (e.isMissingNode() || e.isNull()) {
 			return new All(List.of(new Unparsed("자격 조건", "자격 조건이 정리되지 않았어요. 공고 원문을 확인하세요")));
@@ -50,11 +76,16 @@ public final class HarvesterConditions {
 		income(e, children);
 		residency(e, children);
 		university(e, children);
-		String residual = text(e, "residual_conditions_text");
-		if (residual != null) {
-			children.add(new Unparsed("기타 자격 조건", residual));
-		}
 		return new All(children);
+	}
+
+	/** 기타 자격 조건 글 (Harvester residual_conditions_text), 없으면 null */
+	static String residual(Policy p) {
+		if (p.getRawPayload() == null) {
+			return null;
+		}
+		JsonNode e = JSON.readTree(p.getRawPayload()).path("eligibility");
+		return e.isMissingNode() || e.isNull() ? null : text(e, "residual_conditions_text");
 	}
 
 	/**

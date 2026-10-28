@@ -7,6 +7,8 @@ import com.youthbenefit.eligibility.AiConditions.Unresolved;
 import com.youthbenefit.eligibility.Condition.Cmp;
 import com.youthbenefit.policy.Policy;
 import com.youthbenefit.policy.Regions;
+import com.youthbenefit.policy.PolicySource;
+import com.youthbenefit.profile.EnrollmentStatus;
 import com.youthbenefit.profile.HousingType;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -43,24 +45,31 @@ public class AiConditionConverter {
 
 	/** 취업 상태(jobCd)는 뺐다: "취업 준비 중", "구직 희망" 같은 말이 코드(미취업자·기타)와 딱 맞지 않아 실측에서 잘못 거르는 일이 많았다 */
 	private static final List<String> VARS = List.of("age", "region", "annualIncome", "householdMedianIncomePct",
-			"homeowner", "housingType", "schoolCd", "mrgSttsCd");
+			"homeowner", "housingType", "schoolCd", "mrgSttsCd", "gradeLevel", "gpa", "kosafIncomeBracket",
+			"enrollmentStatus");
 
-	private static final Map<String, String> LABELS = Map.of("age", "나이", "region", "지역", "annualIncome", "소득",
-			"householdMedianIncomePct", "소득", "homeowner", "주택 소유", "housingType", "주거", "jobCd", "취업 상태",
-			"schoolCd", "학력", "mrgSttsCd", "결혼 여부");
+	private static final Map<String, String> LABELS = Map.ofEntries(Map.entry("age", "나이"), Map.entry("region", "지역"),
+			Map.entry("annualIncome", "소득"), Map.entry("householdMedianIncomePct", "가구 소득"),
+			Map.entry("homeowner", "주택 소유"), Map.entry("housingType", "주거"), Map.entry("jobCd", "취업 상태"),
+			Map.entry("schoolCd", "학력"), Map.entry("mrgSttsCd", "결혼 여부"), Map.entry("gradeLevel", "학년"),
+			Map.entry("gpa", "성적"), Map.entry("kosafIncomeBracket", "학자금 지원구간"), Map.entry("enrollmentStatus", "학적"));
 
 	private final LlmClient llm;
 
 	/** 변환할 글이 있는지 (소득 기타·추가 자격·참여 제한 중 하나라도) */
 	public static boolean hasText(Policy p) {
+		if (p.getSource() == PolicySource.SCHOOL) {
+			return HarvesterConditions.residual(p) != null;
+		}
 		return "0043003".equals(p.getEarnCndSeCd()) || p.getAddAplyQlfcCndCn() != null || p.getPtcpPrpTrgtCn() != null;
 	}
 
 	/** 변환에 쓴 글 + 프롬프트 버전의 해시. 저장된 해시와 다르면 다시 변환한다 */
 	public static String textHash(Policy p) {
-		String text = String.join("\u0000", PROMPT_VERSION, String.valueOf(p.getEarnCndSeCd()),
-				String.valueOf(p.getEarnEtcCn()), String.valueOf(p.getAddAplyQlfcCndCn()),
-				String.valueOf(p.getPtcpPrpTrgtCn()));
+		String text = p.getSource() == PolicySource.SCHOOL
+				? String.join("\u0000", PROMPT_VERSION, "SCHOOL", String.valueOf(HarvesterConditions.residual(p)))
+				: String.join("\u0000", PROMPT_VERSION, String.valueOf(p.getEarnCndSeCd()), String.valueOf(p.getEarnEtcCn()),
+						String.valueOf(p.getAddAplyQlfcCndCn()), String.valueOf(p.getPtcpPrpTrgtCn()));
 		try {
 			return HexFormat.of()
 				.formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)));
@@ -106,7 +115,7 @@ public class AiConditionConverter {
 			r.path("values").forEach(v -> values.add(v.asString("").strip()));
 			String evidence = trim(r.path("evidence").asString(""));
 			List<Requirement> checked = cmp == null || !grounded(var, cmp, values, evidence, source) ? List.of()
-					: check(var, cmp, values, evidence);
+					: check(var, cmp, strictBounds(var, cmp, values, evidence), evidence);
 			if (checked.isEmpty()) {
 				rejected = true;
 				unresolved.add(new Unresolved(LABELS.getOrDefault(var, "추가 조건"), evidence, false));
@@ -155,7 +164,8 @@ public class AiConditionConverter {
 		}
 		String wide = all.substring(Math.max(0, at - 30), Math.min(all.length(), at + e.length() + 30));
 		// 다른 길이 있거나("인천 거주 또는 사업자 등록") 앞으로 할 일("전입하고자")이면 필수 조건이 아니다
-		if (containsAny(around, "거나", "이나", "하고자", "예정", "희망", "우대", "가능")) {
+		// "가능"은 "~도 가능"(다른 길도 있음)일 때만 — "2~3학년 지원 가능"은 필수 조건이다
+		if (containsAny(around, "거나", "이나", "하고자", "예정", "희망", "우대", "도가능", "도신청가능", "도지원가능")) {
 			return false;
 		}
 		// 대상이 갈리거나("혼인 혹은 자녀출산한 가구 / 사회초년생은 19~39세") 일부에만 해당하거나("자기돌봄비에 한함") 기준에 더해지면
@@ -179,6 +189,12 @@ public class AiConditionConverter {
 					&& !containsAny(around, "외타", "외지역", "이외", "제외", "타지역", "타시", "외거주")
 					&& values.stream().allMatch(v -> mentions(e, v));
 			// 코드 이름(또는 같은 뜻의 말)이 근거에 있어야 한다("미취업자"를 미혼으로 읽은 경우를 막는다)
+			// 학교 장학: "2~3학년", "평점 3.0(4.5 만점)", "학자금 지원구간 8구간 이내", "재학 중인"
+			case "gradeLevel" -> e.contains("학년") && numbersAppear(values, evidence);
+			case "kosafIncomeBracket" -> e.contains("구간") && numbersAppear(values, evidence);
+			case "gpa" -> containsAny(e, "평점", "학점", "성적") && values.stream().allMatch(v -> decimalAppears(v, evidence));
+			case "enrollmentStatus" -> values.stream().allMatch(v -> ENROLLMENT_WORDS.getOrDefault(v, List.of()).stream()
+				.anyMatch(e::contains));
 			case "schoolCd", "mrgSttsCd" -> values.stream().allMatch(v -> CODE_WORDS.getOrDefault(v, List.of(v)).stream()
 				.map(AiConditionConverter::compact)
 				.anyMatch(e::contains));
@@ -188,6 +204,17 @@ public class AiConditionConverter {
 
 	/** 코드 → 근거에 있어야 하는 말 (코드 이름 또는 같은 뜻). 값이 이름으로 올 때도 같다 */
 	private static final Map<String, List<String>> CODE_WORDS = codeWords();
+
+	/** 학적 → 근거에 있어야 하는 말 */
+	private static final Map<String, List<String>> ENROLLMENT_WORDS = Map.of("ENROLLED", List.of("재학"), "ON_LEAVE",
+			List.of("휴학"), "INCOMING", List.of("입학", "신입생"), "RETURNING", List.of("복학"), "COMPLETED",
+			List.of("졸업", "수료"));
+
+	/** "3.0" 은 근거에 "3.0" 이나 "3" 으로 있어야 한다 */
+	private static boolean decimalAppears(String value, String evidence) {
+		String e = evidence.replaceAll("\\s+", "");
+		return e.contains(value) || e.contains(value.replaceAll("\\.0+$", ""));
+	}
 
 	private static Map<String, List<String>> codeWords() {
 		Map<String, List<String>> words = new java.util.HashMap<>();
@@ -218,6 +245,9 @@ public class AiConditionConverter {
 	record Source(String income, String additional, String exclusion) {
 
 		static Source of(Policy p) {
+			if (p.getSource() == PolicySource.SCHOOL) {
+				return new Source(null, HarvesterConditions.residual(p), null);
+			}
 			String income = "0043003".equals(p.getEarnCndSeCd())
 					? (p.getEarnEtcCn() == null ? "소득 조건이 글로만 안내됨" : p.getEarnEtcCn()) : null;
 			return new Source(income, p.getAddAplyQlfcCndCn(), p.getPtcpPrpTrgtCn());
@@ -319,6 +349,16 @@ public class AiConditionConverter {
 	static List<Requirement> check(String var, Cmp cmp, List<String> values, String evidence) {
 		return switch (var) {
 			case "age" -> numeric("age", cmp, values, 0, 120, evidence);
+			case "gradeLevel" -> numeric("gradeLevel", cmp, values, 1, 6, evidence);
+			case "kosafIncomeBracket" -> cmp == Cmp.LTE || cmp == Cmp.GTE ? numeric("kosafIncomeBracket", cmp, values, 0, 10, evidence)
+					: List.of();
+			case "gpa" -> gpa(cmp, values, evidence);
+			case "enrollmentStatus" -> {
+				Set<String> allowed = Arrays.stream(EnrollmentStatus.values()).map(Enum::name).collect(Collectors.toSet());
+				yield cmp == Cmp.IN && !values.isEmpty() && allowed.containsAll(values)
+						? List.of(new Requirement("enrollmentStatus", Cmp.IN, List.copyOf(new LinkedHashSet<>(values)), evidence))
+						: List.of();
+			}
 			case "annualIncome" -> numeric("annualIncome", cmp, values, 1, 100_000, evidence);
 			case "householdMedianIncomePct" -> numeric("householdMedianIncomePct", cmp, values, 1, 1000, evidence);
 			case "homeowner" -> cmp == Cmp.IN && values.size() == 1
@@ -373,13 +413,55 @@ public class AiConditionConverter {
 					yield List.of();
 				}
 				// 나이는 범위 그대로, 소득은 화면 설명이 "이하/이상"이라 둘로 나눈다
-				yield var.equals("age")
+				yield var.equals("age") || var.equals("gradeLevel")
 						? List.of(new Requirement(var, Cmp.BETWEEN, List.of(numbers.get(0).toString(), numbers.get(1).toString()), evidence))
 						: List.of(new Requirement(var, Cmp.GTE, List.of(numbers.get(0).toString()), evidence),
 								new Requirement(var, Cmp.LTE, List.of(numbers.get(1).toString()), evidence));
 			}
 			default -> List.of();
 		};
+	}
+
+	/** 평점: GTE [기준, 만점]. 만점은 4.0·4.3·4.5·5.0 중 하나, 기준은 0보다 크고 만점 이하 */
+	private static List<Requirement> gpa(Cmp cmp, List<String> values, String evidence) {
+		if (cmp != Cmp.GTE || values.size() != 2) {
+			return List.of();
+		}
+		try {
+			java.math.BigDecimal min = new java.math.BigDecimal(values.get(0));
+			java.math.BigDecimal scale = new java.math.BigDecimal(values.get(1));
+			boolean scaleOk = List.of("4.0", "4.3", "4.5", "5.0").stream().anyMatch(x -> new java.math.BigDecimal(x).compareTo(scale) == 0);
+			if (!scaleOk || min.signum() <= 0 || min.compareTo(scale) > 0) {
+				return List.of();
+			}
+			return List.of(new Requirement("gpa", Cmp.GTE, List.of(min.toPlainString(), scale.toPlainString()), evidence));
+		}
+		catch (NumberFormatException ex) {
+			return List.of();
+		}
+	}
+
+	/**
+	 * "만 30세 미만"은 29세 이하, "3구간 초과"는 4구간 이상 — 정수 기준(나이·학년·학자금 지원구간)만 한 칸 옮긴다. AI 는 "미만"도 LTE 로
+	 * 답해서(실측: 거창군 등록금 "만 30세 미만" → 30세 이하) 한 살 차이로 잘못 받아 줄 수 있다.
+	 */
+	static List<String> strictBounds(String var, Cmp cmp, List<String> values, String evidence) {
+		if (!List.of("age", "gradeLevel", "kosafIncomeBracket").contains(var) || values.size() != 1) {
+			return values;
+		}
+		try {
+			long n = Long.parseLong(values.get(0));
+			if (cmp == Cmp.LTE && evidence.contains("미만")) {
+				return List.of(String.valueOf(n - 1));
+			}
+			if (cmp == Cmp.GTE && evidence.contains("초과")) {
+				return List.of(String.valueOf(n + 1));
+			}
+		}
+		catch (NumberFormatException ex) {
+			// 숫자가 아니면 아래 검사에서 떨어진다
+		}
+		return values;
 	}
 
 	/** 코드 또는 이름("미취업자")을 받아 코드로 */
@@ -420,12 +502,17 @@ public class AiConditionConverter {
 		StringBuilder b = new StringBuilder();
 		b.append("[공고] ").append(p.getTitle()).append('\n');
 		b.append("[이미 정리된 조건] ");
-		List<String> known = ConditionEvaluator.evaluate(OntongConditions.structured(p), ProfileFacts.empty())
+		Condition structured = p.getSource() == PolicySource.SCHOOL ? HarvesterConditions.structured(p)
+				: OntongConditions.structured(p);
+		List<String> known = ConditionEvaluator.evaluate(structured, ProfileFacts.empty())
 			.conditions()
 			.stream()
 			.map(c -> c.label() + ": " + c.requirement())
 			.toList();
 		b.append(known.isEmpty() ? "없음" : String.join(" / ", known)).append("\n\n");
+		if (p.getSource() == PolicySource.SCHOOL) {
+			return b.append("[학교 장학 기타 자격 조건 글]\n").append(HarvesterConditions.residual(p)).append('\n').toString();
+		}
 		if ("0043003".equals(p.getEarnCndSeCd())) {
 			b.append("[소득 조건 글]\n").append(p.getEarnEtcCn() == null ? "(소득 조건이 있다고만 표시됨)" : p.getEarnEtcCn())
 				.append("\n\n");
@@ -461,6 +548,10 @@ public class AiConditionConverter {
 			  - housingType: 지금 사는 형태. IN 중 골라서: MONTHLY_RENT(월세), JEONSE(전세), OWN(자가), WITH_PARENTS(부모님과 거주).
 			  - schoolCd: 학력 코드. IN. {SCHOOL}
 			  - mrgSttsCd: 결혼 여부 코드. IN. {MARRIAGE}
+			  - gradeLevel: 지금 학년(1~6). "2~3학년" → BETWEEN ["2","3"], "3학년 이상" → GTE ["3"]. "○학년 진학 예정"처럼 앞으로의 학년은 쓰지 않는다(unresolved).
+			  - gpa: 평점 기준. GTE ["3.0","4.5"] 처럼 기준 평점과 만점을 함께. 만점이 글에 없으면 unresolved. 이수 학점(12학점 이상)은 평점이 아니라 unresolved.
+			  - kosafIncomeBracket: 한국장학재단 학자금 지원구간. "8구간 이내" → LTE ["8"].
+			  - enrollmentStatus: 학적. IN 중 골라서: ENROLLED(재학), ON_LEAVE(휴학), INCOMING(입학 예정), RETURNING(복학 예정), COMPLETED(수료·졸업).
 			- 취업 상태(재직·구직·창업 등)는 규칙으로 쓰지 말고 unresolved.
 			- 참여 제한(제외) 글의 조건은 반대로 바꿔 필수 조건으로 쓴다: "주택 소유자 제외" → homeowner IN ["false"]. 바꿀 수 없으면 unresolved 에 exclusion=true.
 			- evidence 에는 근거가 된 원문 구절을 한 글자도 바꾸지 말고 그대로 옮긴다(10~40자). 원문에 없는 말을 쓰면 그 규칙은 버려진다.

@@ -67,7 +67,8 @@ public class AiConditionService {
 		}
 		List<Policy> pending = policyRepository.findOpen(LocalDate.now(KST), Pageable.unpaged())
 			.stream()
-			.filter(p -> p.getSource() == PolicySource.ONTONG && AiConditionConverter.hasText(p))
+			.filter(p -> (p.getSource() == PolicySource.ONTONG || p.getSource() == PolicySource.SCHOOL)
+					&& AiConditionConverter.hasText(p))
 			.filter(p -> !AiConditionConverter.textHash(p).equals(p.getAiConditionsHash()))
 			.toList();
 		List<Policy> batch = pending.subList(0, Math.min(limit, pending.size()));

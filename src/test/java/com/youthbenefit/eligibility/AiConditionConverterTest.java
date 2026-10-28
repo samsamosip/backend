@@ -120,6 +120,32 @@ class AiConditionConverterTest {
 	}
 
 	@Test
+	void schoolScholarshipRules() {
+		// #3593 은평구민 장학생
+		AiConditions c = parse(add("2026년 1학기 평균 평점 4.5만점 기준 3.0 이상 2026년 2학기 학자금 지원 소득구간 8구간 이내"),
+				rule("gpa", "GTE", "2026년 1학기 평균 평점 4.5만점 기준 3.0 이상", "3.0", "4.5"),
+				rule("kosafIncomeBracket", "LTE", "학자금 지원 소득구간 8구간 이내", "8"));
+		assertThat(c.requirements()).extracting(Requirement::var).containsExactly("gpa", "kosafIncomeBracket");
+		// 만점이 이상하면 버림, 이수 학점은 평점이 아님
+		assertRejected(parse(add("평점 3.0 이상(10점 만점)"), rule("gpa", "GTE", "평점 3.0 이상(10점 만점)", "3.0", "10")));
+		assertRejected(parse(add("직전 학기 12학점 이상 이수"), rule("gpa", "GTE", "직전 학기 12학점 이상 이수", "12", "4.5")));
+		// 앞으로의 학년은 지금 학년이 아님
+		assertRejected(parse(add("27년 3월 기준 2-1학기, 3-1학기 진학 예정인 자"),
+				rule("gradeLevel", "BETWEEN", "2-1학기, 3-1학기 진학 예정인 자", "2", "3")));
+		assertThat(parse(add("전국 4년제 대학 2~3학년 지원 가능"), rule("gradeLevel", "BETWEEN", "4년제 대학 2~3학년", "2", "3"))
+			.requirements()).hasSize(1);
+	}
+
+	@Test
+	void underAndOverAreStrict() {
+		// #3585 "만 30세 미만" → 29세 이하
+		AiConditions c = parse(add("만 30세 미만 (1996년 10월 15일 이후 출생자)"), rule("age", "LTE", "만 30세 미만", "30"));
+		assertThat(c.requirements().get(0).values()).containsExactly("29");
+		AiConditions over = parse(add("학자금 지원구간 3구간 초과"), rule("kosafIncomeBracket", "GTE", "학자금 지원구간 3구간 초과", "3"));
+		assertThat(over.requirements().get(0).values()).containsExactly("4");
+	}
+
+	@Test
 	void noConditionsOnlyForTrivialText() {
 		assertThat(parse(add("해당 없음"), none()).noExtraConditions()).isTrue();
 		assertThat(parse(new Source("무관, 소득별 본인부담금 차등", "-", "해당없음"), none()).noExtraConditions()).isTrue();

@@ -67,7 +67,7 @@ public class EligibilityService {
 
 	/** AI 변환을 빼고 원래 조건으로 설명. 공고 변경 비교(PolicyDiff)용 */
 	public static List<ConditionResult> describeOriginal(Policy policy) {
-		Condition root = policy.getSource() == PolicySource.SCHOOL ? HarvesterConditions.from(policy)
+		Condition root = policy.getSource() == PolicySource.SCHOOL ? HarvesterConditions.original(policy)
 				: OntongConditions.original(policy);
 		return ConditionEvaluator.evaluate(root, ProfileFacts.empty()).conditions();
 	}
