@@ -44,6 +44,12 @@ public class NotificationSettings {
 
 	private LocalTime quietEnd;
 
+	/** 받는 방법: 앱 알림(앱 안 알림함) */
+	private boolean appEnabled;
+
+	/** 받는 방법: 이메일 (선택 동의). 발송은 메일 설정 후 */
+	private boolean emailEnabled;
+
 	private LocalDateTime updatedAt;
 
 	static NotificationSettings defaults(UUID owner) {
@@ -54,6 +60,7 @@ public class NotificationSettings {
 		s.deadline = true;
 		s.deadlineDays = join(DEFAULT_DEADLINE_DAYS);
 		s.changes = true;
+		s.appEnabled = true;
 		return s;
 	}
 
@@ -65,6 +72,13 @@ public class NotificationSettings {
 		changes = body.changes();
 		quietStart = body.quietStart();
 		quietEnd = body.quietEnd();
+		// 예전 앱은 보내지 않을 수 있어서 비어 있으면 그대로 둔다
+		if (body.app() != null) {
+			appEnabled = body.app();
+		}
+		if (body.email() != null) {
+			emailEnabled = body.email();
+		}
 	}
 
 	public List<Verdict> verdicts() {

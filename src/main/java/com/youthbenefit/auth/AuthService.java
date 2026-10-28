@@ -127,11 +127,11 @@ public class AuthService {
 			throw badCredentials(null);
 		}
 		if (user.isLocked(now)) {
-			throw locked();
+			throw locked(user, now);
 		}
 		if (!encoder.matches(password, user.getPasswordHash())) {
 			if (user.recordFailedLogin(now)) {
-				throw locked();
+				throw locked(user, now);
 			}
 			throw badCredentials(user.remainingAttempts());
 		}
@@ -327,12 +327,13 @@ public class AuthService {
 		}
 	}
 
+	/** 닉네임 규칙(2~10자)에 맞춘다. 한 글자면 기본 이름 */
 	private static String nickname(String fromKakao) {
-		if (fromKakao == null || fromKakao.isBlank()) {
+		if (fromKakao == null || fromKakao.strip().length() < 2) {
 			return "카카오 사용자";
 		}
 		String n = fromKakao.strip();
-		return n.length() <= 20 ? n : n.substring(0, 20);
+		return n.length() <= 10 ? n : n.substring(0, 10);
 	}
 
 	private static ApiException badCredentials(Integer remaining) {
@@ -340,8 +341,14 @@ public class AuthService {
 		return new ApiException(HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "이메일 또는 비밀번호가 맞지 않아요." + suffix);
 	}
 
-	private static ApiException locked() {
-		return new ApiException(HttpStatus.LOCKED, "ACCOUNT_LOCKED", "비밀번호를 5번 틀려서 15분 동안 로그인할 수 없어요.");
+	/** 화면(08-b)에 "15:57 이후", "14분 32초 후"를 보여 줄 수 있게 풀리는 시각과 남은 초를 같이 준다 */
+	private static ApiException locked(User user, LocalDateTime now) {
+		LocalDateTime until = user.getLockedUntil();
+		String time = until.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+		return new ApiException(HttpStatus.LOCKED, "ACCOUNT_LOCKED",
+				"비밀번호를 5번 틀렸어요. " + time + " 이후에 다시 시도하거나, 비밀번호를 새로 설정해 주세요.",
+				Map.of("lockedUntil", until.atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime().toString(),
+						"retryAfterSeconds", Math.max(0, java.time.Duration.between(now, until).toSeconds())));
 	}
 
 }

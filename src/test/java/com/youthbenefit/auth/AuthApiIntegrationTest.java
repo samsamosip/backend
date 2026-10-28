@@ -114,13 +114,13 @@ class AuthApiIntegrationTest {
 
 	@Test
 	void passwordRulesAndInputErrors() throws Exception {
-		signup("a@b.com", "short1", "x").andExpect(status().isBadRequest())
+		signup("a@b.com", "short1", "엑스").andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.errors.password").exists());
-		signup("a@b.com", "onlyletters", "x").andExpect(status().isBadRequest())
+		signup("a@b.com", "onlyletters", "엑스").andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.errors.password").exists());
-		signup("a@b.com", "12345678", "x").andExpect(status().isBadRequest())
+		signup("a@b.com", "12345678", "엑스").andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.errors.password").exists());
-		signup("not-an-email", "good1pass", "x").andExpect(status().isBadRequest())
+		signup("not-an-email", "good1pass", "엑스").andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.errors.email").exists());
 		signup("a@b.com", "good1pass", "").andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.errors.nickname").exists());
@@ -129,7 +129,7 @@ class AuthApiIntegrationTest {
 
 	@Test
 	void codeResendHasCooldownAndFiveWrongCodesInvalidate() throws Exception {
-		signup("cool@example.com", "good1pass", "쿨").andExpect(status().isAccepted());
+		signup("cool@example.com", "good1pass", "쿨쿨").andExpect(status().isAccepted());
 		json(post("/api/v1/auth/email/resend"), "{\"email\":\"cool@example.com\"}")
 			.andExpect(status().isTooManyRequests())
 			.andExpect(jsonPath("$.code").value("CODE_COOLDOWN"));
@@ -160,7 +160,20 @@ class AuthApiIntegrationTest {
 		}
 		login("lock@example.com", "wrong1pass").andExpect(status().isLocked())
 			.andExpect(jsonPath("$.code").value("ACCOUNT_LOCKED"));
-		login("lock@example.com", "good1pass").andExpect(status().isLocked());
+		login("lock@example.com", "good1pass").andExpect(status().isLocked())
+			// 화면(08-b) "15:57 이후", "14분 32초 후"용
+			.andExpect(jsonPath("$.details.lockedUntil").isNotEmpty())
+			.andExpect(jsonPath("$.details.retryAfterSeconds").value(org.hamcrest.Matchers.greaterThan(800)))
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("이후에 다시 시도")));
+	}
+
+	@Test
+	void nicknameIsTwoToTenCharacters() throws Exception {
+		signup("n1@example.com", "good1pass", "가").andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.errors.nickname").value("닉네임은 2~10자로 써 주세요"));
+		signup("n2@example.com", "good1pass", "열한글자닉네임입니다요").andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.errors.nickname").exists());
+		signup("n3@example.com", "good1pass", "홍길동").andExpect(status().isAccepted());
 	}
 
 	@Test

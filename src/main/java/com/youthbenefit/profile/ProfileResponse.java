@@ -38,6 +38,7 @@ public record ProfileResponse(
 		BigDecimal gpa,
 		BigDecimal gpaScale,
 		Integer kosafIncomeBracket,
+		String majorName,
 		List<String> missingFields,
 		LocalDateTime updatedAt) {
 
@@ -52,7 +53,7 @@ public record ProfileResponse(
 				p.getSchoolCd(), p.getMrgSttsCd(), p.getPlcyMajorCd(), splitOrNull(p.getSbizCd()),
 				p.getAnnualIncome(), p.getHouseholdMedianIncomePct(), p.getHouseholdIncomeYear(),
 				p.getHousingType(), p.getHomeowner(), splitOrNull(p.getInterestCategories()), p.getSchoolName(),
-				p.getEnrollmentStatus(), p.getGradeLevel(), p.getGpa(), p.getGpaScale(), p.getKosafIncomeBracket(), missing(p),
+				p.getEnrollmentStatus(), p.getGradeLevel(), p.getGpa(), p.getGpaScale(), p.getKosafIncomeBracket(), p.getMajorName(), missing(p),
 				p.getUpdatedAt());
 	}
 

@@ -125,6 +125,14 @@ class NotificationApiIntegrationTest {
 		mockMvc.perform(get("/api/v1/me/notifications/{id}", id).header("X-Anonymous-Id", other))
 			.andExpect(status().isNotFound());
 
+		// 알림함 탭 (디자인 05)
+		mockMvc.perform(get("/api/v1/me/notifications").param("tab", "EXTENDED").header("X-Anonymous-Id", me))
+			.andExpect(jsonPath("$.items.length()").value(1));
+		mockMvc.perform(get("/api/v1/me/notifications").param("tab", "CORRECTED").header("X-Anonymous-Id", me))
+			.andExpect(jsonPath("$.items.length()").value(0));
+		mockMvc.perform(get("/api/v1/me/notifications").param("tab", "NEW").header("X-Anonymous-Id", me))
+			.andExpect(jsonPath("$.items.length()").value(0));
+
 		// 공고 변경 이력은 누구나 본다
 		mockMvc.perform(get("/api/v1/policies/{id}/changes", policyId))
 			.andExpect(status().isOk())

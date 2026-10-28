@@ -11,7 +11,7 @@ public final class AuthRequests {
 
 	public record Signup(@NotBlank(message = "이메일을 입력해 주세요") String email,
 			@NotBlank(message = "비밀번호를 입력해 주세요") String password,
-			@NotBlank(message = "닉네임을 입력해 주세요") @Size(max = 20, message = "닉네임은 20자 이하로 써 주세요") String nickname) {
+			@NotBlank(message = "닉네임을 입력해 주세요") @Size(min = 2, max = 10, message = "닉네임은 2~10자로 써 주세요") String nickname) {
 	}
 
 	public record Email(@NotBlank(message = "이메일을 입력해 주세요") String email) {
@@ -41,7 +41,7 @@ public final class AuthRequests {
 			@NotBlank(message = "새 비밀번호를 입력해 주세요") String newPassword) {
 	}
 
-	public record Rename(@NotBlank(message = "닉네임을 입력해 주세요") @Size(max = 20, message = "닉네임은 20자 이하로 써 주세요") String nickname) {
+	public record Rename(@NotBlank(message = "닉네임을 입력해 주세요") @Size(min = 2, max = 10, message = "닉네임은 2~10자로 써 주세요") String nickname) {
 	}
 
 }

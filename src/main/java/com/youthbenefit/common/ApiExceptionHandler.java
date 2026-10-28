@@ -31,7 +31,7 @@ public class ApiExceptionHandler {
 
 	@ExceptionHandler(ApiException.class)
 	public ResponseEntity<ErrorResponse> api(ApiException ex) {
-		return ResponseEntity.status(ex.status()).body(new ErrorResponse(ex.getMessage(), Map.of(), ex.code()));
+		return ResponseEntity.status(ex.status()).body(new ErrorResponse(ex.getMessage(), Map.of(), ex.code(), ex.details()));
 	}
 
 	@ExceptionHandler(InvalidRequestException.class)

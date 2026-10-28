@@ -32,12 +32,13 @@ public class NotificationController {
 	private final DailyNotificationService dailyService;
 
 	@Operation(summary = "알림 목록", description = "최신순. type 으로 한 종류만(CHANGE 공고 변경 / NEW_MATCHES 새 공고 / DEADLINE 마감 임박). "
+			+ "tab 은 알림함 탭(디자인 05): NEW 새 공고 / EXTENDED 마감 연장 / CORRECTED 정정(내용 변경 포함) / CANCELLED 취소(공고 내림 포함). "
 			+ "unreadCount 는 안 읽은 알림 전체 개수(배지용), label 은 탭·배지 이름(변경이면 마감 연장·정정·취소 등), summary 는 한 줄 요약")
 	@GetMapping("/api/v1/me/notifications")
 	public NotificationResponses.Page list(@CurrentOwner UUID owner,
-			@RequestParam(required = false) NotificationType type, @RequestParam(defaultValue = "0") int page,
-			@RequestParam(defaultValue = "20") int size) {
-		return service.list(owner, type, Math.max(page, 0), Math.clamp(size, 1, 100));
+			@RequestParam(required = false) NotificationType type, @RequestParam(required = false) NotificationTab tab,
+			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+		return service.list(owner, type, tab, Math.max(page, 0), Math.clamp(size, 1, 100));
 	}
 
 	@Operation(summary = "알림 상세", description = "종류에 따라 changes(공고 변경 전/후), newPolicies(새 맞춤 공고 목록), deadline(마감일·남은 날) 중 하나가 채워진다. 열면 읽음")

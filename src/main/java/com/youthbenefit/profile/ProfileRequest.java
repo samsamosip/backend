@@ -35,5 +35,18 @@ public record ProfileRequest(
 		@Min(1) @Max(6) Integer gradeLevel,
 		@DecimalMin("0") BigDecimal gpa,
 		BigDecimal gpaScale,
-		@Min(0) @Max(10) Integer kosafIncomeBracket) {
+		@Min(0) @Max(10) Integer kosafIncomeBracket,
+		@Size(max = 100) String majorName) {
+
+	/** 전공 이름 없이 (예전 모양) */
+	public ProfileRequest(LocalDate birthDate, String zipCd, String actualZipCd, String jobCd, String schoolCd,
+			String mrgSttsCd, String plcyMajorCd, List<String> sbizCd, Integer annualIncome,
+			Integer householdMedianIncomePct, Integer householdIncomeYear, HousingType housingType, Boolean homeowner,
+			List<String> interestCategories, String schoolName, EnrollmentStatus enrollmentStatus, Integer gradeLevel,
+			BigDecimal gpa, BigDecimal gpaScale, Integer kosafIncomeBracket) {
+		this(birthDate, zipCd, actualZipCd, jobCd, schoolCd, mrgSttsCd, plcyMajorCd, sbizCd, annualIncome,
+				householdMedianIncomePct, householdIncomeYear, housingType, homeowner, interestCategories, schoolName,
+				enrollmentStatus, gradeLevel, gpa, gpaScale, kosafIncomeBracket, null);
+	}
+
 }

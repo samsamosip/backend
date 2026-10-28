@@ -49,8 +49,12 @@ public final class NotificationResponses {
 	 * 알림 수신 설정 (WF05-b). newMatchVerdicts 는 새 공고 중 어떤 판정까지 알릴지(MATCH, NEEDS_CHECK), deadlineDays 는 마감 며칠
 	 * 전에 알릴지(0 = 당일). quietStart/quietEnd 는 방해금지 시간 — 지금은 앱 안 알림만 있어서 저장만 한다.
 	 */
+	/**
+	 * 알림 설정 (05-b). app·email 은 받는 방법 — 앱 알림(기본 켜짐), 이메일(기본 꺼짐, 켜려면 이메일 계정으로 로그인). 보내지 않으면 그대로.
+	 */
 	public record SettingsBody(boolean newMatches, List<Verdict> newMatchVerdicts, boolean deadline,
-			List<Integer> deadlineDays, boolean changes, LocalTime quietStart, LocalTime quietEnd) {
+			List<Integer> deadlineDays, boolean changes, LocalTime quietStart, LocalTime quietEnd, Boolean app,
+			Boolean email) {
 	}
 
 	/** 공고 하나의 변경 이력 한 줄. */

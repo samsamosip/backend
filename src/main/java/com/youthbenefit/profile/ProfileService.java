@@ -85,6 +85,10 @@ public class ProfileService {
 			.orElseGet(() -> repository.save(UserProfile.create(anonymousId)));
 		ObjectNode merged = jsonMapper.valueToTree(profile.toRequest());
 		merged.setAll(changes);
+		// 전공 이름만 바꾸면 계열도 새 이름에서 다시 정한다
+		if (changes.has("majorName") && !changes.has("plcyMajorCd")) {
+			merged.putNull("plcyMajorCd");
+		}
 		ProfileRequest request = jsonMapper.treeToValue(merged, ProfileRequest.class);
 		validate(request);
 		validateCodes(request);

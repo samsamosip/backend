@@ -10,6 +10,8 @@ import com.youthbenefit.policy.Policy;
 import com.youthbenefit.policy.PolicyRepository;
 import com.youthbenefit.policy.PolicySummaryResponse;
 import com.youthbenefit.policy.Regions;
+import com.youthbenefit.profile.UserProfile;
+import com.youthbenefit.profile.UserProfileRepository;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
@@ -44,6 +46,15 @@ public class SearchService {
 
 	private final EligibilityService eligibilityService;
 
+	private final UserProfileRepository profileRepository;
+
+	/** 화면에서 ×로 뺀 칩. dropWords 는 뺄 단어 묶음의 대표어 */
+	public record Removed(boolean region, boolean category, boolean age, boolean closingSoon, List<String> dropWords) {
+
+		public static final Removed NONE = new Removed(false, false, false, false, List.of());
+
+	}
+
 	/**
 	 * @param understood 알아들은 조건 (화면 칩)
 	 * @param message 결과가 없을 때 안내 (WF06-b), 있으면 null
@@ -62,7 +73,24 @@ public class SearchService {
 	/** @param allowAi false 면 AI 없이(사용량 제한) */
 	@Transactional(readOnly = true)
 	public SearchResponse search(UUID owner, String text, boolean includeNoMatch, int page, int size, boolean allowAi) {
+		return search(owner, text, Removed.NONE, includeNoMatch, page, size, allowAi);
+	}
+
+	/**
+	 * @param removed 화면에서 ×로 뺀 칩. 지역을 빼지 않았고 문장에 지역이 없으면 내 프로필 지역(시도)으로 찾는다
+	 */
+	@Transactional(readOnly = true)
+	public SearchResponse search(UUID owner, String text, Removed removed, boolean includeNoMatch, int page, int size,
+			boolean allowAi) {
 		SearchQuery query = interpreter.interpret(text, allowAi);
+		if (query.regionCodes().isEmpty() && !removed.region() && owner != null) {
+			String zip = profileRepository.findByAnonymousId(owner).map(UserProfile::getZipCd).orElse(null);
+			if (zip != null && zip.length() >= 2 && Regions.sidoName(zip.substring(0, 2)) != null) {
+				query = query.withProfileRegion(Regions.sidoName(zip.substring(0, 2)), List.of(zip.substring(0, 2)));
+			}
+		}
+		query = query.without(removed.region(), removed.category(), removed.age(), removed.closingSoon(),
+				removed.dropWords());
 		LocalDate today = LocalDate.now(KST);
 		List<Policy> open = policyRepository.findOpen(today, Pageable.unpaged()).getContent();
 		ProfileFacts facts = eligibilityService.facts(owner);

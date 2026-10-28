@@ -63,13 +63,16 @@ public final class ApplicationResponses {
 
 	}
 
-	/** policyChange: 공고 서류가 바뀌어 붙은 표시(ADDED 새로 추가 / DROPPED 공고에서 빠짐), 없으면 null */
+	/**
+	 * policyChange: 공고 서류가 바뀌어 붙은 표시(ADDED 새로 추가 / DROPPED 공고에서 빠짐), 없으면 null. guide: 어디서 발급받는지
+	 * (서류 이름 아래 "정부24 · 무료 · 온라인 발급 →"), 모르면 null
+	 */
 	public record Item(Long id, String content, boolean optional, ChecklistItem.Source source, boolean checked,
-			ChecklistItem.PolicyChange policyChange, String policyChangeLabel) {
+			ChecklistItem.PolicyChange policyChange, String policyChangeLabel, DocumentGuides.Guide guide) {
 
 		static Item of(ChecklistItem i) {
 			return new Item(i.getId(), i.getContent(), i.isOptional(), i.getSource(), i.isChecked(), i.getPolicyChange(),
-					i.getPolicyChange() == null ? null : i.getPolicyChange().label());
+					i.getPolicyChange() == null ? null : i.getPolicyChange().label(), DocumentGuides.of(i.getContent()));
 		}
 
 	}

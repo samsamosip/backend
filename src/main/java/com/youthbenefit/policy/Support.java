@@ -26,9 +26,10 @@ import tools.jackson.databind.json.JsonMapper;
  * @param period MONTH 월, YEAR 연, SEMESTER 학기, ONCE 1회, TOTAL 총, 모르면 null
  * @param kind CASH 현금, LOAN 대출, INTEREST 이자 지원, VOUCHER 바우처·현물, SERVICE 서비스·교육(돈 아님), OTHER
  * @param source SCHOOL(Harvester), AI, TEXT(첫 줄)
+ * @param months 매월 받는 지원의 최대 기간(개월) — 지원 내용 글의 "최대 12개월", "24개월간", "2년간". 모르면 null
  */
 public record Support(String label, Long amountWon, String period, boolean upTo, String kind, String summary,
-		String source) {
+		String source, Integer months) {
 
 	/** 프롬프트를 바꾸면 올린다 — 해시가 달라져서 다시 뽑는다 */
 	public static final String PROMPT_VERSION = "s1";
@@ -49,10 +50,12 @@ public record Support(String label, Long amountWon, String period, boolean upTo,
 			boolean upTo = ai.path("upTo").asBoolean(false);
 			String kind = ai.path("kind").asString("OTHER");
 			String summary = ai.path("summary").isString() ? ai.path("summary").asString() : firstLine(p);
-			return new Support(amount == null ? null : label(amount, period, upTo, kind), amount, period, upTo, kind,
-					summary, "AI");
+			Integer months = "MONTH".equals(period) ? months(p.getSupportContent()) : null;
+			String label = amount == null ? null
+					: label(amount, period, upTo, kind) + (months == null ? "" : " · 최대 " + months + "개월");
+			return new Support(label, amount, period, upTo, kind, summary, "AI", months);
 		}
-		return new Support(null, null, null, false, null, firstLine(p), "TEXT");
+		return new Support(null, null, null, false, null, firstLine(p), "TEXT", null);
 	}
 
 	/** 뽑을 때 쓴 글(제목·지원 내용·설명) + 프롬프트 버전 해시 */
@@ -172,9 +175,30 @@ public record Support(String label, Long amountWon, String period, boolean upTo,
 			// 학자금 대출도 장학 목록에 섞여 온다
 			String kind = p.getTitle() != null && p.getTitle().contains("대출") ? "LOAN" : "CASH";
 			return new Support(label(best, period, upTo || benefits.size() > 1, kind), best, period,
-					upTo || benefits.size() > 1, kind, firstLine(p), "SCHOOL");
+					upTo || benefits.size() > 1, kind, firstLine(p), "SCHOOL", null);
 		}
-		return percent == null ? null : new Support(percent, null, null, false, "CASH", firstLine(p), "SCHOOL");
+		return percent == null ? null : new Support(percent, null, null, false, "CASH", firstLine(p), "SCHOOL", null);
+	}
+
+	private static final Pattern MONTHS = Pattern.compile("(?:최대\\s*)?([0-9]{1,2})\\s*개월");
+
+	private static final Pattern YEARS = Pattern.compile("([0-9])\\s*년\\s*(?:간|동안)");
+
+	/** 글에 나온 지원 기간 중 가장 긴 것(개월): "최대 12개월", "24개월간", "2년간" → 24. 1~60개월만 */
+	static Integer months(String text) {
+		if (text == null) {
+			return null;
+		}
+		int best = 0;
+		Matcher m = MONTHS.matcher(text);
+		while (m.find()) {
+			best = Math.max(best, Integer.parseInt(m.group(1)));
+		}
+		Matcher y = YEARS.matcher(text);
+		while (y.find()) {
+			best = Math.max(best, Integer.parseInt(y.group(1)) * 12);
+		}
+		return best >= 1 && best <= 60 ? best : null;
 	}
 
 	/** 지원 내용 첫 줄(머리 기호·괄호 머리말 뺌), 30자 */

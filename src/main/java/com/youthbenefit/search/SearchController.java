@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,11 +47,16 @@ public class SearchController {
 			description = "\"서울 사는 대학생 월세 지원\" 같은 문장으로 지금 신청 가능한 공고를 찾고 내 프로필로 판정한다. understood 는 알아들은 조건(화면 칩: "
 					+ "keywords 단어 묶음, categories, region, age, closingSoon, ai). 기본은 불일치 제외(includeNoMatch=true 면 포함). "
 					+ "결과가 없으면 message 에 안내(WF06-b). 로그인 토큰이나 X-Anonymous-Id 가 없으면 빈 프로필로 판정. "
-					+ "1분에 30번 넘게 검색하면 429 RATE_LIMITED, 1시간에 AI 해석 30번이 넘으면 단어로 찾고 notice 로 알린다")
+					+ "1분에 30번 넘게 검색하면 429 RATE_LIMITED, 1시간에 AI 해석 30번이 넘으면 단어로 찾고 notice 로 알린다. "
+					+ "문장에 지역이 없으면 내 프로필 지역(시도)으로 찾는다(understood.regionFromProfile, 칩 \"내 지역 · 인천\"). "
+					+ "칩을 ×로 빼면 같은 q 에 noRegion·noCategory·noAge·noClosingSoon=true, 단어 묶음은 drop=대표어(여러 번 가능)를 붙여 다시 부른다")
 	@GetMapping("/api/v1/search")
 	public SearchService.SearchResponse search(@RequestParam String q, @CurrentOwner(required = false) UUID owner,
 			HttpServletRequest request,
-			@RequestParam(defaultValue = "false") boolean includeNoMatch, @RequestParam(defaultValue = "0") int page,
+			@RequestParam(defaultValue = "false") boolean includeNoMatch,
+			@RequestParam(defaultValue = "false") boolean noRegion, @RequestParam(defaultValue = "false") boolean noCategory,
+			@RequestParam(defaultValue = "false") boolean noAge, @RequestParam(defaultValue = "false") boolean noClosingSoon,
+			@RequestParam(required = false) List<String> drop, @RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "20") int size) {
 		if (q.isBlank() || q.length() > 200) {
 			throw new InvalidRequestException(Map.of("q", "검색어는 1~200자로 써 주세요"));
@@ -60,7 +66,8 @@ public class SearchController {
 		if (!perIp.tryAcquire(ip) || !perClient.tryAcquire(client)) {
 			throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", "검색이 너무 잦아요. 잠시 후 다시 해 주세요.");
 		}
-		return service.search(owner, q, includeNoMatch, Math.max(page, 0), Math.clamp(size, 1, 100),
+		var removed = new SearchService.Removed(noRegion, noCategory, noAge, noClosingSoon, drop == null ? List.of() : drop);
+		return service.search(owner, q, removed, includeNoMatch, Math.max(page, 0), Math.clamp(size, 1, 100),
 				aiPerClient.tryAcquire(client));
 	}
 

@@ -1,5 +1,7 @@
 package com.youthbenefit.policy;
 
+import com.youthbenefit.application.DocumentGuides;
+import com.youthbenefit.application.DocumentListParser;
 import com.youthbenefit.auth.CurrentOwner;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
@@ -48,7 +50,10 @@ public class PolicyController {
 	public PolicyResponse get(@PathVariable Long id, @CurrentOwner(required = false) UUID viewer) {
 		return policyRepository.findById(id)
 			.filter(p -> p.visibleTo(viewer))
-			.map(PolicyResponse::from)
+			.map(p -> PolicyResponse.from(p, DocumentListParser.documents(p)
+				.stream()
+				.map(d -> new PolicyResponse.Document(d.name(), d.optional(), DocumentGuides.of(d.name())))
+				.toList()))
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "공고를 찾을 수 없습니다: " + id));
 	}
 

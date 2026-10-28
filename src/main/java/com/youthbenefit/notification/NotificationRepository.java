@@ -23,6 +23,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	@EntityGraph(attributePaths = "policyChange")
 	Optional<Notification> findByIdAndAnonymousId(Long id, UUID anonymousId);
 
+	@EntityGraph(attributePaths = "policyChange")
+	@Query("select n from Notification n where n.anonymousId = :owner and n.policyChange.kind in :kinds order by n.id desc")
+	Page<Notification> findByKinds(@Param("owner") UUID owner, @Param("kinds") java.util.List<ChangeKind> kinds,
+			Pageable pageable);
+
 	boolean existsByAnonymousIdAndDedupeKey(UUID anonymousId, String dedupeKey);
 
 	long countByAnonymousIdAndReadAtIsNull(UUID anonymousId);

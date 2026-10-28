@@ -23,6 +23,14 @@ class SupportTest {
 	}
 
 	@Test
+	void readsSupportMonths() {
+		assertThat(Support.months("월 최대 20만원씩 최대 12개월 지원")).isEqualTo(12);
+		assertThat(Support.months("임차료 월 최대 20만원씩 최대 24개월간 지원")).isEqualTo(24);
+		assertThat(Support.months("보호종료아동에게 5년간 매월 50만원")).isEqualTo(60);
+		assertThat(Support.months("월 30만원 지원")).isNull();
+	}
+
+	@Test
 	void formatsLabels() {
 		assertThat(Support.label(300_000, "MONTH", true, "CASH")).isEqualTo("월 최대 30만원");
 		assertThat(Support.label(1_800_000, "SEMESTER", false, "CASH")).isEqualTo("학기당 180만원");

@@ -83,6 +83,15 @@ public class EligibilityService {
 	 */
 	public MatchesResponse matches(UUID anonymousId, String category, Verdict verdictFilter, boolean includeNoMatch,
 			Integer closingWithinDays, int page, int size) {
+		return matches(anonymousId, category, verdictFilter, includeNoMatch, closingWithinDays, true, page, size);
+	}
+
+	/**
+	 * @param recommended 추천순(조건 일치 → 확인 필요 → 불일치, 같으면 마감 임박순). false 면 마감순만
+	 */
+	@Transactional(readOnly = true)
+	public MatchesResponse matches(UUID anonymousId, String category, Verdict verdictFilter, boolean includeNoMatch,
+			Integer closingWithinDays, boolean recommended, int page, int size) {
 		ProfileFacts facts = facts(anonymousId);
 		LocalDate today = today();
 		List<Policy> open = openPolicies(category, today);
@@ -100,6 +109,10 @@ public class EligibilityService {
 
 		MatchesResponse.Counts counts = new MatchesResponse.Counts(count(judged, Verdict.MATCH),
 				count(judged, Verdict.NEEDS_CHECK), count(judged, Verdict.NO_MATCH));
+		if (recommended) {
+			// 공고는 이미 마감 임박순이라 판정 순서로만 다시 줄 세운다(같은 판정 안에서는 마감 임박순 유지)
+			judged = judged.stream().sorted(Comparator.comparingInt(m -> m.verdict().ordinal())).toList();
+		}
 		List<MatchItem> filtered = judged.stream()
 			.filter(m -> verdictFilter != null ? m.verdict() == verdictFilter
 					: includeNoMatch || m.verdict() != Verdict.NO_MATCH)

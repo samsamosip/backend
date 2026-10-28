@@ -94,7 +94,7 @@ docker compose up -d --no-build
 | 경로 | 내용 |
 |---|---|
 | `GET /api/v1/policies?category=&page=&size=` | 지금 신청할 수 있는 공고. 마감 임박순, 마감일 없는(상시) 공고는 뒤로. `size` 최대 100. 카드마다 `source`(ONTONG 정부 공고 / SCHOOL 학교 장학) |
-| `GET /api/v1/policies/{id}` | 공고 상세. 자격 조건은 온통청년 코드 그대로(`jobCd`, `schoolCd` 등) |
+| `GET /api/v1/policies/{id}` | 공고 상세. 자격 조건은 온통청년 코드 그대로(`jobCd`, `schoolCd` 등). `sourceUrl` 원문 보기 링크(온통청년 상세 페이지·학교 장학 원문·직접 등록 링크), `documents` 제출 서류 목록(준비함 체크리스트와 같은 쪼개기), `support` 지원 금액(매월 지원이면 "월 최대 20만원 · 최대 24개월") |
 | `POST /api/v1/admin/ontong/sync` | 온통청년 전체 수집. 결과 `{fetched, created, updated, unchanged}` |
 | `POST /api/v1/admin/harvester/sync` | 학교 장학 수집(`?full=true`면 목록 전체 비교). 결과 `{mode, seen, skippedOld, fetched, created, updated, unchanged, removed, failed}` |
 | `GET /api/v1/codes` | 온보딩 선택지(`jobCd`, `schoolCd`, `mrgSttsCd`, `plcyMajorCd`, `sbizCd`, `housingType`, `interestCategories`, 학교용 `enrollmentStatus`, `gpaScale`, `kosafIncomeBracket`)의 code·label |
@@ -103,16 +103,16 @@ docker compose up -d --no-build
 | `PUT /api/v1/me/profile` | 내 프로필 전체 저장. 보내지 않은 항목은 "모름"으로 비워진다 |
 | `PATCH /api/v1/me/profile` | 보낸 항목만 수정 `{"annualIncome": 2400}`. 안 보낸 항목은 그대로, `null`은 "모름"으로. 프로필이 없으면 새로 만든다 |
 | `DELETE /api/v1/me` | 내 데이터 삭제 (프로필과 준비함) |
-| `GET /api/v1/me/matches?category=&verdict=&includeNoMatch=&page=&size=` | 맞춤 공고(WF02). 신청 가능한 공고를 내 프로필로 판정. 기본은 조건 일치 + 확인 필요, 마감 임박순. `counts`는 전체 판정 건수. `closingWithinDays=7`이면 7일 안에 마감하는 공고만(홈 "이번 주 마감", 상시 모집 제외). 카드마다 `dDay` |
+| `GET /api/v1/me/matches?category=&verdict=&includeNoMatch=&page=&size=` | 맞춤 공고(WF02). 신청 가능한 공고를 내 프로필로 판정. 기본은 조건 일치 + 확인 필요, 마감 임박순. `counts`는 전체 판정 건수. `sort=recommended`(기본, 추천순: 조건 일치 → 확인 필요 → 불일치, 같으면 마감 임박) / `deadline`(마감순). `closingWithinDays=7`이면 7일 안에 마감하는 공고만(홈 "이번 주 마감", 상시 모집 제외). 카드마다 `dDay` |
 | `GET /api/v1/me/suggestions` | 홈 배너: 비어 있는 내 정보마다 채우면 판정이 확정되는 공고 수 `{field, label, resolvable, affected, message}`, 효과 큰 순. 예: "소득을 입력하면 공고 2개가 더 판정돼요". 글로 된 조건이 남아 채워도 확인 필요인 공고는 `resolvable`에 세지 않는다 |
 | `POST /api/v1/me/applications` | 준비함에 담기 `{"policyId": 1}`(관심) 또는 `{"policyId": 1, "status": "PREPARING"}`("신청 준비 시작"). 이미 담겨 있으면 200으로 기존 것을 주고, status를 보냈으면 상태만 바꾼다. 응답의 `appliedAt`은 신청 완료로 표시한 시각 |
 | `GET /api/v1/me/applications` | 준비함 목록. 카드마다 상태, 마감 D-day, 준비율 |
-| `GET /api/v1/me/applications/{id}` | 준비함 상세. 체크리스트, 제출 서류 원문, 신청 링크 |
+| `GET /api/v1/me/applications/{id}` | 준비함 상세. 체크리스트, 제출 서류 원문, 신청 링크. 체크리스트 서류마다 `guide`: 어디서 발급받는지 `{issuer, fee, online, url, label: "정부24 · 무료 · 온라인 발급"}`, 모르면 null(`application/DocumentGuides`: 자주 나오는 서류 40여 종, 실데이터 서류 1,002개 중 약 65%) |
 | `PATCH /api/v1/me/applications/{id}` | 상태 변경 `{"status": "PREPARING"}` (INTERESTED / PREPARING / APPLIED) |
-| `GET /api/v1/me/notifications?type=` | 알림함(WF05): 최신순. `type`: CHANGE(담은 공고 변경) / NEW_MATCHES(새 맞춤 공고, 하루 1회 묶음) / DEADLINE(담은 공고 마감 임박). `unreadCount`(배지용), 알림마다 `label`(탭·배지 이름: 마감 연장·정정·취소·새 공고·마감 임박 등)과 한 줄 `summary` |
+| `GET /api/v1/me/notifications?type=&tab=` | 알림함(WF05): 최신순. `tab`은 디자인 탭: NEW 새 공고 / EXTENDED 마감 연장 / CORRECTED 정정(내용 변경 포함) / CANCELLED 취소(공고 내림 포함). `type`: CHANGE(담은 공고 변경) / NEW_MATCHES(새 맞춤 공고, 하루 1회 묶음) / DEADLINE(담은 공고 마감 임박). `unreadCount`(배지용), 알림마다 `label`(탭·배지 이름: 마감 연장·정정·취소·새 공고·마감 임박 등)과 한 줄 `summary` |
 | `GET /api/v1/me/notifications/{id}` | 알림 상세. 종류에 따라 `changes`(바뀐 항목 전/후 `[{field, label, before, after}]`), `newPolicies`(`{total, policies: [{policyId, title, verdict, verdictLabel}]}`), `deadline`(`{applyEndDate, daysLeft}`) 중 하나. 열면 읽음 |
 | `POST /api/v1/me/notifications/read-all`, `DELETE /api/v1/me/notifications/{id}` | 모두 읽음, 알림 삭제 |
-| `GET`·`PUT /api/v1/me/notification-settings` | 알림 설정(WF05-b): `{newMatches, newMatchVerdicts: ["MATCH","NEEDS_CHECK"], deadline, deadlineDays: [7,3,1,0], changes, quietStart, quietEnd}`. 저장한 적 없으면 전부 켜짐. 방해금지 시간은 앱 밖 발송이 생기면 쓴다 |
+| `GET`·`PUT /api/v1/me/notification-settings` | 알림 설정(WF05-b): `{newMatches, newMatchVerdicts: ["MATCH","NEEDS_CHECK"], deadline, deadlineDays: [7,3,1,0], changes, quietStart, quietEnd, app, email}`. `app`·`email`은 받는 방법(기본 앱 켬·이메일 끔, 보내지 않으면 그대로). 저장한 적 없으면 전부 켜짐. 방해금지 시간은 앱 밖 발송이 생기면 쓴다 |
 | `POST /api/v1/admin/ai/conditions?limit=50` | 글 조건 AI 변환: 신청 가능한 온통청년 공고 중 아직 안 했거나 글이 바뀐 것만. 결과 `{pending, converted, reviewed, failed, tokens}`. 정기 수집(`ONTONG_SYNC_SCHEDULED`) 뒤에도 자동으로 돈다 |
 | `POST /api/v1/admin/ai/support?limit=50`, `/recheck` | 지원 금액·한 줄 요약 AI 뽑기 / 저장된 답 다시 검사(비용 없음). 정기 수집 뒤에도 자동 |
 | `POST /api/v1/admin/ai/conditions/recheck` | 검사 규칙을 고친 뒤 저장된 AI 답을 다시 검사 (AI 호출·비용 없음) |
@@ -358,6 +358,8 @@ PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_con
   여러 사람이 한 IP를 써도 막히지 않게 넉넉히), 한 사람 1시간 AI 해석 30번 넘으면 단어 검색으로(기억해 둔 문장은 그대로 AI 해석). 서버 전체 하루 토큰 한도
   (`PWC_LLM_DAILY_TOKEN_LIMIT`)를 넘으면 모든 AI 기능이 다음 날까지 쉰다. 제한은 서버 메모리에서 센다(서버 한 대 기준, 다시 켜면 처음부터).
   진짜 사용자 IP는 앞단 프록시(사설 IP)가 준 `X-Forwarded-For`로 본다(`server.forward-headers-strategy: native`).
+- 문장에 지역이 없으면 내 프로필 지역(시도)으로 찾는다(`understood.regionFromProfile`, 화면 칩 "내 지역 · 인천"). 칩을 ×로 빼면 같은 `q`에
+  `noRegion`·`noCategory`·`noAge`·`noClosingSoon=true`, 단어 묶음은 `drop=대표어`를 붙여 다시 부른다(디자인 06).
 - 처음엔 "대학"이 "대학중점연구소"에 걸리거나 "지원"이 모든 공고에 걸려서 엉뚱한 공고가 위로 왔다 → 찾는 것/누구를 나누고 흔한 말을 빼서 고침.
 
 ### 학교 장학 수집

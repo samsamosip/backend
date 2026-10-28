@@ -66,6 +66,9 @@ public class UserProfile {
 	/** 한국장학재단 학자금 지원구간 0~10 (0 = 기초·차상위) */
 	private Integer kosafIncomeBracket;
 
+	/** 사용자가 쓴 전공 이름. 계열 코드(plcyMajorCd)는 이것에서 정한다(코드를 직접 보내면 그 코드) */
+	private String majorName;
+
 	private LocalDateTime createdAt;
 	private LocalDateTime updatedAt;
 
@@ -83,7 +86,9 @@ public class UserProfile {
 		jobCd = r.jobCd();
 		schoolCd = r.schoolCd();
 		mrgSttsCd = r.mrgSttsCd();
-		plcyMajorCd = r.plcyMajorCd();
+		majorName = r.majorName() == null || r.majorName().isBlank() ? null : r.majorName().strip();
+		// 전공 이름만 왔으면 계열을 이름에서 정한다 (디자인 01: 전공을 글로 입력)
+		plcyMajorCd = r.plcyMajorCd() != null ? r.plcyMajorCd() : MajorCategories.codeOf(majorName);
 		sbizCd = r.sbizCd() == null ? null : String.join(",", r.sbizCd());
 		annualIncome = r.annualIncome();
 		householdMedianIncomePct = r.householdMedianIncomePct();
@@ -103,7 +108,8 @@ public class UserProfile {
 	public ProfileRequest toRequest() {
 		return new ProfileRequest(birthDate, zipCd, actualZipCd, jobCd, schoolCd, mrgSttsCd, plcyMajorCd, list(sbizCd),
 				annualIncome, householdMedianIncomePct, householdIncomeYear, housingType, homeowner,
-				list(interestCategories), schoolName, enrollmentStatus, gradeLevel, gpa, gpaScale, kosafIncomeBracket);
+				list(interestCategories), schoolName, enrollmentStatus, gradeLevel, gpa, gpaScale, kosafIncomeBracket,
+				majorName);
 	}
 
 	private static List<String> list(String commaSeparated) {

@@ -45,9 +45,20 @@ public class NotificationService {
 	/** type 을 주면 그 종류만(알림함 탭). */
 	@Transactional(readOnly = true)
 	public NotificationResponses.Page list(UUID owner, NotificationType type, int page, int size) {
+		return list(owner, type, null, page, size);
+	}
+
+	/** @param tab 알림함 탭(디자인 05). 주면 type 보다 먼저 */
+	@Transactional(readOnly = true)
+	public NotificationResponses.Page list(UUID owner, NotificationType type, NotificationTab tab, int page, int size) {
 		var pageable = PageRequest.of(page, size);
-		var result = type == null ? notificationRepository.findAllByAnonymousIdOrderByIdDesc(owner, pageable)
-				: notificationRepository.findAllByAnonymousIdAndTypeOrderByIdDesc(owner, type, pageable);
+		if (tab == NotificationTab.NEW) {
+			type = NotificationType.NEW_MATCHES;
+		}
+		var result = tab != null && tab != NotificationTab.NEW
+				? notificationRepository.findByKinds(owner, tab.kinds(), pageable)
+				: type == null ? notificationRepository.findAllByAnonymousIdOrderByIdDesc(owner, pageable)
+						: notificationRepository.findAllByAnonymousIdAndTypeOrderByIdDesc(owner, type, pageable);
 		Map<Long, String> titles = titles(result.getContent().stream().map(Notification::getPolicyId).toList());
 		List<Summary> items = result.getContent().stream().map(n -> {
 			ChangeKind kind = n.getPolicyChange() == null ? null : n.getPolicyChange().getKind();
@@ -123,7 +134,7 @@ public class NotificationService {
 
 	private static SettingsBody body(NotificationSettings s) {
 		return new SettingsBody(s.isNewMatches(), s.verdicts(), s.isDeadline(), s.days(), s.isChanges(),
-				s.getQuietStart(), s.getQuietEnd());
+				s.getQuietStart(), s.getQuietEnd(), s.isAppEnabled(), s.isEmailEnabled());
 	}
 
 	private static String label(Notification n) {

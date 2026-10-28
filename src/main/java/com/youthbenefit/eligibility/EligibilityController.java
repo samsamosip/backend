@@ -26,16 +26,19 @@ public class EligibilityController {
 	@Operation(summary = "맞춤 공고 목록",
 			description = "지금 신청 가능한 공고를 내 프로필로 판정한다. 기본은 조건 일치 + 확인 필요(불일치 제외), 마감 임박순. "
 					+ "verdict 로 한 가지만, includeNoMatch=true 면 불일치까지 본다. closingWithinDays=7 이면 7일 안에 마감하는 공고만(이번 주 마감). "
-					+ "counts 는 verdict·includeNoMatch 와 상관없는 건수(category·closingWithinDays 는 반영). 카드마다 dDay(상시 모집은 null)")
+					+ "counts 는 verdict·includeNoMatch 와 상관없는 건수(category·closingWithinDays 는 반영). 카드마다 dDay(상시 모집은 null). "
+					+ "sort: recommended 추천순(조건 일치 → 확인 필요 → 불일치, 같으면 마감 임박순, 기본) / deadline 마감순")
 	@GetMapping("/api/v1/me/matches")
 	public MatchesResponse matches(
 			@CurrentOwner(required = false) UUID anonymousId,
 			@RequestParam(required = false) String category, @RequestParam(required = false) Verdict verdict,
 			@RequestParam(defaultValue = "false") boolean includeNoMatch,
-			@RequestParam(required = false) Integer closingWithinDays, @RequestParam(defaultValue = "0") int page,
+			@RequestParam(required = false) Integer closingWithinDays,
+			@RequestParam(defaultValue = "recommended") String sort, @RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "20") int size) {
 		return eligibilityService.matches(anonymousId, category, verdict, includeNoMatch,
-				closingWithinDays == null ? null : Math.clamp(closingWithinDays, 0, 365), Math.max(page, 0),
+				closingWithinDays == null ? null : Math.clamp(closingWithinDays, 0, 365), !"deadline".equals(sort),
+				Math.max(page, 0),
 				Math.clamp(size, 1, 100));
 	}
 

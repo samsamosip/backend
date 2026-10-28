@@ -179,7 +179,9 @@ class DailyNotificationIntegrationTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.newMatches").value(true))
 			.andExpect(jsonPath("$.deadlineDays").value(org.hamcrest.Matchers.contains(7, 3, 1, 0)))
-			.andExpect(jsonPath("$.changes").value(true));
+			.andExpect(jsonPath("$.changes").value(true))
+			.andExpect(jsonPath("$.app").value(true))
+			.andExpect(jsonPath("$.email").value(false));
 
 		mockMvc.perform(put("/api/v1/me/notification-settings").header("X-Anonymous-Id", id)
 			.contentType(MediaType.APPLICATION_JSON)
@@ -195,7 +197,20 @@ class DailyNotificationIntegrationTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.deadlineDays").value(org.hamcrest.Matchers.contains(3, 1)))
 			.andExpect(jsonPath("$.changes").value(false))
-			.andExpect(jsonPath("$.quietStart").value("22:00:00"));
+			.andExpect(jsonPath("$.quietStart").value("22:00:00"))
+			// 받는 방법을 안 보내면 그대로
+			.andExpect(jsonPath("$.app").value(true))
+			.andExpect(jsonPath("$.email").value(false));
+
+		// 받는 방법 (디자인 05-b)
+		mockMvc.perform(put("/api/v1/me/notification-settings").header("X-Anonymous-Id", id)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"newMatches\":true,\"newMatchVerdicts\":[\"MATCH\"],\"deadline\":true,\"deadlineDays\":[1],\"changes\":true,\"app\":false,\"email\":true}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.app").value(false))
+			.andExpect(jsonPath("$.email").value(true));
+		mockMvc.perform(get("/api/v1/me/notification-settings").header("X-Anonymous-Id", id))
+			.andExpect(jsonPath("$.email").value(true));
 	}
 
 }

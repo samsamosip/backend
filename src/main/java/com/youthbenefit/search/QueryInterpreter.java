@@ -85,7 +85,7 @@ public class QueryInterpreter {
 		Integer age = raw.path("age").isNumber() && raw.path("age").asInt() > 0 && raw.path("age").asInt() <= 120
 				? raw.path("age").asInt() : null;
 		return new SearchQuery(keywords, audience, categories.subList(0, Math.min(2, categories.size())),
-				codes.isEmpty() ? null : region, codes, age, raw.path("closingSoon").asBoolean(false), true);
+				codes.isEmpty() ? null : region, codes, age, raw.path("closingSoon").asBoolean(false), true, false);
 	}
 
 	/** 단어 묶음 검사: 흔한 말("지원", "청년")은 빼고, 대표어가 흔한 말이면 묶음째 뺀다 */
@@ -135,7 +135,7 @@ public class QueryInterpreter {
 			.distinct()
 			.toList();
 		keywords.removeIf(g -> categories.contains(g.get(0)));
-		return new SearchQuery(keywords, List.of(), categories, region, codes, null, false, false);
+		return new SearchQuery(keywords, List.of(), categories, region, codes, null, false, false, false);
 	}
 
 	static final String SYSTEM = """
