@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/** 화면에서 받지 않는 항목(가구 중위소득 %, 주택 소유)은 "입력하세요"로 안내하지 않는다 (10/28 팀 결정: 소득은 본인 연소득만) */
+/** 화면에서 받지 않는 가구 중위소득 %는 "입력하세요"로 안내하지 않는다 (10/28 팀 결정: 소득은 본인 연소득만). 주택 소유는 체크칸으로 받는다 */
 class NotAskedFieldsTest {
 
 	private static final Condition HOUSING = new All(List.of(new Check("householdMedianIncomePct", Cmp.LTE, List.of("150"), "e"),
@@ -23,9 +23,10 @@ class NotAskedFieldsTest {
 	void unknownMedianIncomeAndHomeownerPointToTheNotice() {
 		ConditionEvaluator.Evaluation e = ConditionEvaluator.evaluate(HOUSING, ProfileFacts.empty());
 		assertThat(e.conditions()).extracting(ConditionResult::missingField)
-			.containsExactly(null, null, "annualIncome");
+			.containsExactly(null, "homeowner", "annualIncome");
 		assertThat(EligibilityService.explanation(Verdict.NEEDS_CHECK, e))
-			.isEqualTo("소득을 입력하고, 주택 소유는 공고 원문에서 확인해 주세요");
+			.isEqualTo("주택 소유·소득을 입력하고, 가구 소득은 공고 원문에서 확인해 주세요");
+		assertThat(EligibilityService.summary(Verdict.NEEDS_CHECK, e)).isEqualTo("주택 소유·소득 정보·가구 소득 확인 필요");
 	}
 
 	@Test

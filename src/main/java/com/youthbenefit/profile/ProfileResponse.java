@@ -68,6 +68,7 @@ public record ProfileResponse(
 		addIfNull(missing, "plcyMajorCd", p.getPlcyMajorCd());
 		addIfNull(missing, "sbizCd", p.getSbizCd());
 		addIfNull(missing, "annualIncome", p.getAnnualIncome());
+		addIfNull(missing, "homeowner", p.getHomeowner());
 		return missing;
 	}
 

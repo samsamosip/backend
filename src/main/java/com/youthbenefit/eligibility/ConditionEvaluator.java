@@ -23,7 +23,7 @@ public final class ConditionEvaluator {
 
 	private static final Map<String, String> LABELS = Map.ofEntries(Map.entry("age", "나이"),
 			Map.entry("zipCd", "지역"), Map.entry("annualIncome", "소득"),
-			Map.entry("householdMedianIncomePct", "소득"), Map.entry("jobCd", "취업 상태"),
+			Map.entry("householdMedianIncomePct", "가구 소득"), Map.entry("jobCd", "취업 상태"),
 			Map.entry("schoolCd", "학력"), Map.entry("mrgSttsCd", "결혼 여부"), Map.entry("plcyMajorCd", "전공"),
 			Map.entry("sbizCd", "특화 대상"), Map.entry("housingType", "주거"), Map.entry("homeowner", "주택 소유"),
 			Map.entry("schoolName", "학교"), Map.entry("enrollmentStatus", "학적"), Map.entry("gradeLevel", "학년"),
@@ -65,9 +65,9 @@ public final class ConditionEvaluator {
 
 	/**
 	 * 화면에서 입력받지 않는 항목. 모를 때 "입력하면 확인돼요" 대신 "공고 원문에서 확인"으로 안내한다. 가구 기준중위소득 %는 팀 결정(10/28)으로
-	 * 받지 않고 본인 연소득만 받는다. 주택 소유도 화면에 질문이 없다(주거 형태가 자가면 소유로 본다, {@link ProfileFacts}).
+	 * 받지 않고 본인 연소득만 받는다. 주택 소유는 "내 명의로 된 집이 있어요" 체크칸으로 받는다(10/28 추가).
 	 */
-	static final java.util.Set<String> NOT_ASKED = java.util.Set.of("householdMedianIncomePct", "homeowner");
+	static final java.util.Set<String> NOT_ASKED = java.util.Set.of("householdMedianIncomePct");
 
 	static boolean askable(String var) {
 		return !NOT_ASKED.contains(var);
