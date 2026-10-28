@@ -33,6 +33,8 @@ public class EligibilityService {
 
 	private final PolicyRepository policyRepository;
 
+	private final PolicyCatalog catalog;
+
 	private final UserProfileRepository profileRepository;
 
 	/** 프로필이 없으면(헤더 없음 포함) 빈 프로필로 판정한다 — 조건이 있는 공고는 모두 "확인 필요"가 된다. */
@@ -47,7 +49,12 @@ public class EligibilityService {
 	}
 
 	public PolicyEligibility judge(Policy policy, ProfileFacts facts) {
-		ConditionEvaluator.Evaluation evaluation = ConditionEvaluator.evaluate(conditions(policy), facts);
+		return judge(policy, conditions(policy), facts);
+	}
+
+	/** 조건을 미리 만들어 둔 경우({@link PolicyCatalog}) */
+	public PolicyEligibility judge(Policy policy, Condition condition, ProfileFacts facts) {
+		ConditionEvaluator.Evaluation evaluation = ConditionEvaluator.evaluate(condition, facts);
 		Verdict verdict = Verdict.of(evaluation.truth());
 		List<String> missing = evaluation.conditions()
 			.stream()
@@ -94,17 +101,20 @@ public class EligibilityService {
 			Integer closingWithinDays, boolean recommended, int page, int size) {
 		ProfileFacts facts = facts(anonymousId);
 		LocalDate today = today();
-		List<Policy> open = openPolicies(category, today);
+		List<PolicyCatalog.Entry> open = openPolicies(category, today);
 		if (closingWithinDays != null) {
 			LocalDate last = today.plusDays(closingWithinDays);
-			open = open.stream().filter(p -> p.getApplyEndDate() != null && !p.getApplyEndDate().isAfter(last)).toList();
+			open = open.stream()
+				.filter(e -> e.policy().getApplyEndDate() != null && !e.policy().getApplyEndDate().isAfter(last))
+				.toList();
 		}
 
-		List<MatchItem> judged = open.stream().map(p -> {
-			PolicyEligibility e = judge(p, facts);
+		List<MatchItem> judged = open.stream().map(entry -> {
+			Policy p = entry.policy();
+			PolicyEligibility e = judge(p, entry.condition(), facts);
 			Integer dDay = p.getApplyEndDate() == null ? null
 					: (int) ChronoUnit.DAYS.between(today, p.getApplyEndDate());
-			return new MatchItem(PolicySummaryResponse.from(p), e.verdict(), e.verdictLabel(), e.summary(), dDay);
+			return new MatchItem(entry.summary(), e.verdict(), e.verdictLabel(), e.summary(), dDay);
 		}).toList();
 
 		MatchesResponse.Counts counts = new MatchesResponse.Counts(count(judged, Verdict.MATCH),
@@ -124,10 +134,18 @@ public class EligibilityService {
 		return new MatchesResponse(counts, filtered.subList(from, to), page, size, filtered.size(), totalPages);
 	}
 
-	private List<Policy> openPolicies(String category, LocalDate today) {
-		Pageable all = Pageable.unpaged(Sort.by(Sort.Order.asc("applyEndDate").nullsLast(), Sort.Order.desc("id")));
-		return (category == null || category.isBlank()) ? policyRepository.findOpen(today, all).getContent()
-				: policyRepository.findOpenByCategory(today, category, all).getContent();
+	/** 지금 신청 가능한 공고 (메모리에 들고 있는 것, {@link PolicyCatalog}). category 는 공식 대분류 */
+	private List<PolicyCatalog.Entry> openPolicies(String category, LocalDate today) {
+		List<PolicyCatalog.Entry> all = catalog.open(today);
+		if (category == null || category.isBlank()) {
+			return all;
+		}
+		return all.stream().filter(e -> inCategory(e.policy(), category)).toList();
+	}
+
+	public static boolean inCategory(Policy p, String category) {
+		return p.getCategoryGroup() != null
+				&& java.util.Arrays.stream(p.getCategoryGroup().split(",")).map(String::strip).anyMatch(category::equals);
 	}
 
 	/** 판정 변수 → 프로필 항목 이름과 화면 이름. 나이 조건은 생년월일로 채운다. */
@@ -155,8 +173,8 @@ public class EligibilityService {
 		ProfileFacts facts = facts(anonymousId);
 		Map<String, Integer> resolvable = new HashMap<>();
 		Map<String, Integer> affected = new HashMap<>();
-		for (Policy policy : openPolicies(null, today())) {
-			ConditionEvaluator.Evaluation evaluation = ConditionEvaluator.evaluate(conditions(policy), facts);
+		for (PolicyCatalog.Entry entry : openPolicies(null, today())) {
+			ConditionEvaluator.Evaluation evaluation = ConditionEvaluator.evaluate(entry.condition(), facts);
 			if (Verdict.of(evaluation.truth()) != Verdict.NEEDS_CHECK) {
 				continue;
 			}

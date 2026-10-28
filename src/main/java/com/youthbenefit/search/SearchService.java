@@ -2,6 +2,7 @@ package com.youthbenefit.search;
 
 import com.youthbenefit.eligibility.EligibilityService;
 import com.youthbenefit.eligibility.MatchItem;
+import com.youthbenefit.eligibility.PolicyCatalog;
 import com.youthbenefit.eligibility.MatchesResponse;
 import com.youthbenefit.eligibility.PolicyEligibility;
 import com.youthbenefit.eligibility.ProfileFacts;
@@ -45,6 +46,8 @@ public class SearchService {
 	private final PolicyRepository policyRepository;
 
 	private final EligibilityService eligibilityService;
+
+	private final PolicyCatalog catalog;
 
 	private final UserProfileRepository profileRepository;
 
@@ -92,15 +95,19 @@ public class SearchService {
 		query = query.without(removed.region(), removed.category(), removed.age(), removed.closingSoon(),
 				removed.dropWords());
 		LocalDate today = LocalDate.now(KST);
-		List<Policy> open = policyRepository.findOpen(today, Pageable.unpaged()).getContent();
+		List<PolicyCatalog.Entry> entries = catalog.open(today);
+		List<Policy> open = entries.stream().map(PolicyCatalog.Entry::policy).toList();
+		java.util.Map<Long, PolicyCatalog.Entry> byId = entries.stream()
+			.collect(java.util.stream.Collectors.toMap(e -> e.policy().getId(), e -> e));
 		ProfileFacts facts = eligibilityService.facts(owner);
 
 		List<Scored> found = find(open, query, today);
 		List<Ranked> ranked = found.stream().map(s -> {
-			PolicyEligibility e = eligibilityService.judge(s.policy(), facts);
+			PolicyCatalog.Entry entry = byId.get(s.policy().getId());
+			PolicyEligibility e = eligibilityService.judge(s.policy(), entry.condition(), facts);
 			Integer dDay = s.policy().getApplyEndDate() == null ? null
 					: (int) ChronoUnit.DAYS.between(today, s.policy().getApplyEndDate());
-			return new Ranked(s.needHits(), s.score(), new MatchItem(PolicySummaryResponse.from(s.policy()), e.verdict(), e.verdictLabel(),
+			return new Ranked(s.needHits(), s.score(), new MatchItem(entry.summary(), e.verdict(), e.verdictLabel(),
 					e.summary(), dDay));
 		})
 			.sorted(Comparator.comparingInt(Ranked::needHits)

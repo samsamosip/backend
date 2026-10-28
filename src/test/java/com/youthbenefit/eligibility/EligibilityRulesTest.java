@@ -24,7 +24,7 @@ class EligibilityRulesTest {
 
 	private final OntongPolicyMapper mapper = new OntongPolicyMapper(JsonMapper.builder().build());
 
-	private final EligibilityService service = new EligibilityService(null, null);
+	private final EligibilityService service = new EligibilityService(null, null, null);
 
 	/** 제한 없는 온통청년 공고에서 주어진 칸만 바꾼다. */
 	private Policy policy(String... overrides) {

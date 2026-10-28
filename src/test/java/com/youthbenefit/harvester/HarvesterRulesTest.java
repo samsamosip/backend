@@ -34,7 +34,7 @@ class HarvesterRulesTest {
 
 	private final HarvesterPolicyMapper mapper = new HarvesterPolicyMapper(JsonMapper.builder().build());
 
-	private final EligibilityService service = new EligibilityService(null, null);
+	private final EligibilityService service = new EligibilityService(null, null, null);
 
 	private String detail;
 
