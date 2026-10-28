@@ -31,6 +31,8 @@ public class NotificationController {
 
 	private final DailyNotificationService dailyService;
 
+	private final NotificationEmailService emailService;
+
 	@Operation(summary = "알림 목록", description = "최신순. type 으로 한 종류만(CHANGE 공고 변경 / NEW_MATCHES 새 공고 / DEADLINE 마감 임박). "
 			+ "tab 은 알림함 탭(디자인 05): NEW 새 공고 / EXTENDED 마감 연장 / CORRECTED 정정(내용 변경 포함) / CANCELLED 취소(공고 내림 포함). "
 			+ "unreadCount 는 안 읽은 알림 전체 개수(배지용), label 은 탭·배지 이름(변경이면 마감 연장·정정·취소 등), summary 는 한 줄 요약")
@@ -77,6 +79,12 @@ public class NotificationController {
 	@PostMapping("/api/v1/admin/notifications/run-daily")
 	public DailyNotificationService.Result runDaily() {
 		return dailyService.run(LocalDate.now(KST), LocalDateTime.now());
+	}
+
+	@Operation(summary = "알림 메일 지금 보내기 (관리자)", description = "보통은 매일 아침 8시 매일 알림 뒤에 자동. 이메일 받기를 켠 인증된 계정에 안 보낸 알림을 한 통으로")
+	@PostMapping("/api/v1/admin/notifications/email-digest")
+	public NotificationEmailService.Result emailDigest() {
+		return emailService.sendDigests(LocalDateTime.now());
 	}
 
 	@Operation(summary = "공고 변경 이력", description = "이 공고가 언제 무엇이 바뀌었는지 (최신순)")

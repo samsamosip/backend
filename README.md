@@ -64,6 +64,7 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 | `PWC_LLM_MODEL`, `PWC_LLM_REVIEW_MODEL` | `openai.gpt-4.1-mini`, `openai.gpt-4.1` | 1차 변환 모델, 애매한 것만 다시 보는 2차 모델. 이름 앞에 `openai.`가 붙는다(목록 API는 막혀 있음, 실측으로 확인: `openai.gpt-4o(-mini)`, `openai.gpt-4.1(-mini)`, `openai.gpt-5(-mini/-nano)`) |
 | `PWC_LLM_DAILY_TOKEN_LIMIT` | `3000000` | 하루(한국 시간) AI 토큰 한도. 넘으면 다음 날까지 AI를 안 부른다(검색은 단어로, 변환은 다음 수집 때). 주간 $50 보호용. 0이면 제한 없음 |
 | `SEARCH_RATE_PER_MINUTE`, `SEARCH_RATE_PER_IP_PER_MINUTE`, `SEARCH_AI_PER_HOUR` | `30`, `300`, `30` | 검색 사용량 제한: 한 사람(IP+기기) 1분, 한 IP 전체(같은 와이파이) 1분 — 넘으면 429 `RATE_LIMITED`. 한 사람 1시간 AI 해석 수 — 넘으면 단어 검색(오류 아님, `notice`로 안내) |
+| `APP_WEB_URL` | `http://localhost:5173` | 프론트 주소. 알림 메일의 "알림함에서 보기" 링크에 쓴다. 배포하면 프론트 주소로 |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000` | API를 부를 수 있는 프론트 주소(콤마 구분). 배포하면 프론트 주소를 추가 |
 | `DOCKER_COMPOSE_ENABLED` | `true` | Docker 없이 직접 띄운 PostgreSQL을 쓸 때 `false` |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | 로컬 기본값 | `DOCKER_COMPOSE_ENABLED=false`일 때 쓰는 접속 정보 |
@@ -116,6 +117,7 @@ docker compose up -d --no-build
 | `POST /api/v1/admin/ai/conditions?limit=50` | 글 조건 AI 변환: 신청 가능한 온통청년 공고 중 아직 안 했거나 글이 바뀐 것만. 결과 `{pending, converted, reviewed, failed, tokens}`. 정기 수집(`ONTONG_SYNC_SCHEDULED`) 뒤에도 자동으로 돈다 |
 | `POST /api/v1/admin/ai/support?limit=50`, `/recheck` | 지원 금액·한 줄 요약 AI 뽑기 / 저장된 답 다시 검사(비용 없음). 정기 수집 뒤에도 자동 |
 | `POST /api/v1/admin/ai/conditions/recheck` | 검사 규칙을 고친 뒤 저장된 AI 답을 다시 검사 (AI 호출·비용 없음) |
+| `POST /api/v1/admin/notifications/email-digest` | 알림 메일 지금 보내기. 보통은 매일 아침 8시 매일 알림 뒤에 자동 |
 | `POST /api/v1/admin/notifications/run-daily` | 매일 알림(새 맞춤 공고·마감 임박) 지금 실행. 보통은 매일 아침 8시 자동 |
 | `GET /api/v1/policies/{id}/changes` | 공고 변경 이력(누구나) |
 | `DELETE /api/v1/me/applications/{id}` | 관심 해제 |
@@ -415,7 +417,10 @@ PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_con
 - **제출 서류가 바뀌면 체크리스트에 반영**: 새 서류는 추가하고 `policyChange: "ADDED"`(새로 추가), 빠진 서류는 지우지 않고(이미 체크했을 수 있어서)
   `"DROPPED"`(공고에서 빠짐)로 표시한다. 띄어쓰기·대소문자만 다르면 같은 서류. 사용자가 추가한 항목은 건드리지 않고, 빠졌던 서류가 다시 들어오면 표시를 뗀다.
   준비함 카드의 `documentChanges`는 표시된 항목 수("서류 변경" 배지).
-- 알림은 앱 안 알림함만 있다. 카톡·이메일 발송은 채널이 정해지면 알림 생성 시점에 붙인다.
+- **알림 메일**: 알림 설정에서 이메일 받기(`email`)를 켠, 이메일 인증을 마친 계정에 하루 한 번(아침 8시 매일 알림 뒤) 아직 안 보낸 알림을 한 통으로 묶어
+  보낸다(`NotificationEmailService`). 방해금지 시간이면 다음 날로 미루고, 보낸 알림은 `emailed_at`으로 표시해 다시 보내지 않는다. 3일 넘은 알림은 메일로 보내지 않는다.
+  메일의 "알림함에서 보기" 링크는 `APP_WEB_URL`(프론트 주소) + `/notifications`. 보내는 주소는 `MAIL_USERNAME`(지금 `youthbenefit.guide@gmail.com`).
+- 앱 밖 알림은 메일만 있다(웹 푸시·카톡은 없음). 카톡·이메일 발송은 채널이 정해지면 알림 생성 시점에 붙인다.
 
 ### 공고 직접 등록
 

@@ -18,9 +18,13 @@ public class DailyNotificationScheduler {
 
 	private final DailyNotificationService service;
 
+	private final NotificationEmailService emailService;
+
 	@Scheduled(cron = "${notifications.daily.cron:0 0 8 * * *}", zone = "Asia/Seoul")
 	public void run() {
 		service.run(LocalDate.now(KST), LocalDateTime.now());
+		// 방금 만든 알림과 밤사이 공고 변경 알림을 한 통으로
+		emailService.sendDigests(LocalDateTime.now());
 	}
 
 }

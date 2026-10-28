@@ -46,6 +46,31 @@ public class AuthMailer {
 		this.fromName = mail.fromName();
 	}
 
+	/** 메일 설정이 있는지 (없으면 로컬 개발) */
+	public boolean configured() {
+		return sender != null;
+	}
+
+	/** 아무 메일이나 (글자용·화면용 함께). 설정이 없으면 로그만 */
+	public void send(String to, String subject, String text, String html) {
+		if (sender == null) {
+			log.warn("[개발용 — 메일 설정 없음] 메일 \"{}\" → {}", subject, to);
+			return;
+		}
+		try {
+			MimeMessage message = sender.createMimeMessage();
+			MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+			helper.setFrom(address, fromName);
+			helper.setTo(to);
+			helper.setSubject(subject);
+			helper.setText(text, html);
+			sender.send(message);
+		}
+		catch (MessagingException | java.io.UnsupportedEncodingException ex) {
+			throw new IllegalStateException("메일을 만들지 못했어요", ex);
+		}
+	}
+
 	public void sendCode(String email, VerificationCode.Purpose purpose, String code) {
 		if (sender == null) {
 			log.warn("[개발용 — 메일 설정 없음] {} 코드 {} → {}", purpose, code, email);

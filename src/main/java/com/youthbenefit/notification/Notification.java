@@ -55,6 +55,13 @@ public class Notification {
 
 	private LocalDateTime readAt;
 
+	/** 알림 메일로 보낸 시각 (하루 한 번 묶음) */
+	private LocalDateTime emailedAt;
+
+	void markEmailed(LocalDateTime now) {
+		emailedAt = now;
+	}
+
 	static Notification change(UUID owner, Long policyId, PolicyChange change) {
 		Notification n = new Notification();
 		n.anonymousId = owner;

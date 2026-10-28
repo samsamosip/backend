@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class VerificationCode {
 
-	enum Purpose {
+	public enum Purpose {
 		SIGNUP, RESET
 	}
 

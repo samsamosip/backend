@@ -137,7 +137,7 @@ public class NotificationService {
 				s.getQuietStart(), s.getQuietEnd(), s.isAppEnabled(), s.isEmailEnabled());
 	}
 
-	private static String label(Notification n) {
+	static String label(Notification n) {
 		return n.getType() == NotificationType.CHANGE && n.getPolicyChange() != null
 				? n.getPolicyChange().getKind().label() : n.getType().label();
 	}
@@ -173,7 +173,7 @@ public class NotificationService {
 		return jsonMapper.readValue(n.getPayload(), type);
 	}
 
-	private Map<Long, String> titles(List<Long> policyIds) {
+	Map<Long, String> titles(List<Long> policyIds) {
 		List<Long> ids = policyIds.stream().filter(Objects::nonNull).toList();
 		return policyRepository.findAllById(ids)
 			.stream()

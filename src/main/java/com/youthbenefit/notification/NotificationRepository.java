@@ -28,6 +28,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	Page<Notification> findByKinds(@Param("owner") UUID owner, @Param("kinds") java.util.List<ChangeKind> kinds,
 			Pageable pageable);
 
+	/** 아직 메일로 안 보낸 알림 (오래된 것은 빼고) */
+	@EntityGraph(attributePaths = "policyChange")
+	java.util.List<Notification> findAllByAnonymousIdAndEmailedAtIsNullAndCreatedAtAfterOrderByIdAsc(UUID anonymousId,
+			LocalDateTime after);
+
 	boolean existsByAnonymousIdAndDedupeKey(UUID anonymousId, String dedupeKey);
 
 	long countByAnonymousIdAndReadAtIsNull(UUID anonymousId);
