@@ -46,6 +46,13 @@ app:
       username: ${MAIL_USERNAME:}
       password: ${MAIL_PASSWORD:}   # Gmail 은 앱 비밀번호
       from-name: 청년혜택 길잡이
+      # 하루(한국 시각) 보낼 메일 수. Gmail 은 하루 약 500통이 넘으면 계정을 막는다
+      daily-limit: ${MAIL_DAILY_LIMIT:450}
+    rate-limit:
+      # 한 사람(IP)이 1시간에 받을 수 있는 인증 메일 요청(가입·코드 다시 받기·비밀번호 찾기). 행사장 와이파이처럼 여럿이 한 IP 를 써도 되게
+      mail-per-hour: ${AUTH_MAIL_PER_HOUR:20}
+      # 한 사람(IP)이 10분에 할 수 있는 로그인·코드 확인 시도
+      attempts-per-10-minutes: ${AUTH_ATTEMPTS_PER_10_MINUTES:60}
   admin:
     # 관리자 API(/api/v1/admin/**) 키. 비어 있으면 잠그지 않는다(로컬 개발). 배포 서버에만 넣는다
     api-key: ${ADMIN_API_KEY:}

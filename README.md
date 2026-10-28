@@ -65,6 +65,8 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 | `PWC_LLM_DAILY_TOKEN_LIMIT` | `3000000` | 하루(한국 시간) AI 토큰 한도. 넘으면 다음 날까지 AI를 안 부른다(검색은 단어로, 변환은 다음 수집 때). 주간 $50 보호용. 0이면 제한 없음 |
 | `SEARCH_RATE_PER_MINUTE`, `SEARCH_RATE_PER_IP_PER_MINUTE`, `SEARCH_AI_PER_HOUR` | `30`, `300`, `30` | 검색 사용량 제한: 한 사람(IP+기기) 1분, 한 IP 전체(같은 와이파이) 1분 — 넘으면 429 `RATE_LIMITED`. 한 사람 1시간 AI 해석 수 — 넘으면 단어 검색(오류 아님, `notice`로 안내) |
 | `APP_WEB_URL` | `http://localhost:5173` | 프론트 주소. 알림 메일의 "알림함에서 보기" 링크에 쓴다. 배포하면 프론트 주소로 |
+| `MAIL_DAILY_LIMIT` | `450` | 하루(한국 시각) 보낼 메일 수. Gmail은 하루 약 500통이 넘으면 계정을 막아서 그 전에 멈춘다(가입은 503 `MAIL_BUSY`) |
+| `AUTH_MAIL_PER_HOUR`, `AUTH_ATTEMPTS_PER_10_MINUTES` | `20`, `60` | 한 사람(IP)의 인증 메일 요청(가입·코드 다시 받기·비밀번호 찾기) 1시간 수, 로그인·코드 확인 시도 10분 수. 넘으면 429 `MAIL_RATE_LIMITED` / `TOO_MANY_ATTEMPTS` |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000` | API를 부를 수 있는 프론트 주소(콤마 구분). 배포하면 프론트 주소를 추가 |
 | `DOCKER_COMPOSE_ENABLED` | `true` | Docker 없이 직접 띄운 PostgreSQL을 쓸 때 `false` |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | 로컬 기본값 | `DOCKER_COMPOSE_ENABLED=false`일 때 쓰는 접속 정보 |
@@ -149,6 +151,9 @@ docker compose up -d --no-build
 
 - 로그인 응답: `{accessToken, accessTokenExpiresIn: 1800, refreshToken, refreshTokenExpiresIn: 1209600, account}`.
   출입증(access) 30분, 갱신 토큰 14일. 오류는 `{message, errors, code}` — 화면 분기는 `code`로 한다.
+- 남용 막기: 한 사람(IP) 인증 메일 요청 1시간 20번, 로그인·코드 확인 10분 60번(행사장 와이파이처럼 여럿이 한 IP를 써도 되게 넉넉히),
+  한 주소당 하루 코드 10통(429 `CODE_DAILY_LIMIT`, 남의 주소로 메일 폭탄 막기), 서버 전체 하루 메일 450통(503 `MAIL_BUSY`, Gmail 계정 막힘 막기).
+  `AuthRateLimitInterceptor`, 서버 메모리에서 센다.
 - 비밀번호: 8~64자, 영문과 숫자를 함께. 특수문자는 써도 되고 안 써도 된다. BCrypt로 저장.
 - 로그인 전에 쓰던 데이터 옮기기: 가입 완료·로그인·카카오·비밀번호 재설정 요청에 `X-Anonymous-Id`를 같이 보내면 그 UUID의 프로필·알림 설정
   (계정에 없을 때만)·준비함(이미 담은 공고는 계정 것 유지)·알림을 계정으로 옮긴다.

@@ -23,6 +23,7 @@ services:
       KAKAO_REDIRECT_URIS: '${KAKAO_REDIRECT_URIS:-http://localhost:5173/auth/kakao/callback}'
       MAIL_USERNAME: '${MAIL_USERNAME:-}'
       MAIL_PASSWORD: '${MAIL_PASSWORD:-}'
+      MAIL_DAILY_LIMIT: '${MAIL_DAILY_LIMIT:-450}'
       PWC_LLM_BASE_URL: '${PWC_LLM_BASE_URL:-}'
       PWC_LLM_API_KEY: '${PWC_LLM_API_KEY:-}'
       PWC_LLM_MODEL: '${PWC_LLM_MODEL:-openai.gpt-4.1-mini}'

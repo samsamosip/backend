@@ -22,7 +22,17 @@ public class AuthMailer {
 
 	private final String fromName;
 
-	public AuthMailer(AuthProperties properties) {
+	/** 하루(한국 시각) 보낼 수 있는 메일 수. Gmail 은 하루 약 500통이 넘으면 계정을 막아서 그 전에 멈춘다 */
+	private final int dailyLimit;
+
+	private java.time.LocalDate countDay;
+
+	private int sentToday;
+
+	@org.springframework.beans.factory.annotation.Autowired
+	public AuthMailer(AuthProperties properties,
+			@org.springframework.beans.factory.annotation.Value("${app.auth.mail.daily-limit:450}") int dailyLimit) {
+		this.dailyLimit = dailyLimit;
 		AuthProperties.Mail mail = properties.mail();
 		if (mail == null || mail.username() == null || mail.username().isBlank()) {
 			this.sender = null;
@@ -46,6 +56,35 @@ public class AuthMailer {
 		this.fromName = mail.fromName();
 	}
 
+	public AuthMailer(AuthProperties properties) {
+		this(properties, 450);
+	}
+
+	/** 오늘 더 보낼 수 있는지. 넘었으면 503 MAIL_BUSY (가입·비밀번호 찾기에서 코드를 만들기 전에 본다) */
+	public synchronized void checkCapacity() {
+		rollDay();
+		if (sender != null && dailyLimit > 0 && sentToday >= dailyLimit) {
+			throw new com.youthbenefit.common.ApiException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
+					"MAIL_BUSY", "인증 메일이 몰려서 지금은 보낼 수 없어요. 잠시 후(내일) 다시 해 주세요.");
+		}
+	}
+
+	private synchronized void countSent() {
+		rollDay();
+		sentToday++;
+		if (sentToday == dailyLimit) {
+			log.warn("오늘 메일 한도({}통)를 다 썼어요. 내일까지 메일을 보내지 않아요", dailyLimit);
+		}
+	}
+
+	private void rollDay() {
+		java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"));
+		if (!today.equals(countDay)) {
+			countDay = today;
+			sentToday = 0;
+		}
+	}
+
 	/** 메일 설정이 있는지 (없으면 로컬 개발) */
 	public boolean configured() {
 		return sender != null;
@@ -57,6 +96,7 @@ public class AuthMailer {
 			log.warn("[개발용 — 메일 설정 없음] 메일 \"{}\" → {}", subject, to);
 			return;
 		}
+		checkCapacity();
 		try {
 			MimeMessage message = sender.createMimeMessage();
 			MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -65,6 +105,7 @@ public class AuthMailer {
 			helper.setSubject(subject);
 			helper.setText(text, html);
 			sender.send(message);
+			countSent();
 		}
 		catch (MessagingException | java.io.UnsupportedEncodingException ex) {
 			throw new IllegalStateException("메일을 만들지 못했어요", ex);
@@ -86,7 +127,9 @@ public class AuthMailer {
 			helper.setSubject(subject);
 			// 글자만 보는 메일 앱용과 보기 좋은 화면용을 함께 (글만 있는 짧은 메일은 스팸으로 가기 쉽다)
 			helper.setText(text(signup, code), html(signup, code));
+			checkCapacity();
 			sender.send(message);
+			countSent();
 		}
 		catch (MessagingException | java.io.UnsupportedEncodingException ex) {
 			throw new IllegalStateException("메일을 만들지 못했어요", ex);

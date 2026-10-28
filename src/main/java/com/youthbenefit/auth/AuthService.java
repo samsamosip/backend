@@ -45,6 +45,8 @@ public class AuthService {
 
 	static final Duration RESET_TICKET_TTL = Duration.ofMinutes(10);
 
+	static final int CODES_PER_EMAIL_PER_DAY = 10;
+
 	private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
 	private static final Pattern HAS_LETTER = Pattern.compile("[A-Za-z]");
@@ -281,6 +283,13 @@ public class AuthService {
 			.ifPresent(last -> {
 				throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "CODE_COOLDOWN", "코드는 1분 뒤에 다시 받을 수 있어요.");
 			});
+		// 한 주소에 하루 10통까지 (남의 주소로 메일 폭탄 막기)
+		if (codes.countByEmailAndCreatedAtAfter(email, now.toLocalDate().atStartOfDay()) >= CODES_PER_EMAIL_PER_DAY) {
+			throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "CODE_DAILY_LIMIT",
+					"이 주소로는 오늘 코드를 더 보낼 수 없어요. 내일 다시 해 주세요.");
+		}
+		// 서버 전체 하루 메일 한도를 넘었으면 코드를 만들기 전에 멈춘다(보내지도 못한 코드가 1분 제한에 걸리지 않게)
+		mailer.checkCapacity();
 		String code = Secrets.newCode();
 		codes.save(new VerificationCode(email, purpose, Secrets.sha256(code), now.plus(CODE_TTL)));
 		mailer.sendCode(email, purpose, code);
