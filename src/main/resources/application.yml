@@ -99,6 +99,16 @@ search:
     per-ip-per-minute: ${SEARCH_RATE_PER_IP_PER_MINUTE:300} # 한 IP 전체(같은 와이파이) 1분 검색 수
     ai-per-hour: ${SEARCH_AI_PER_HOUR:30}                # 한 사람 1시간 AI 해석 수, 넘으면 단어 검색
 
+importer:
+  # 링크 불러오기 서버(크롤러, AI 팀원). 공고 링크를 주면 공고 직접 등록 입력칸을 채워 준다. 값은 .env 에만
+  base-url: ${IMPORTER_BASE_URL:}
+  api-key: ${IMPORTER_API_KEY:}
+  # 결과 콜백 서명(HMAC-SHA256) 공유 비밀키. 불러오기 서버와 같은 값
+  callback-secret: ${IMPORTER_CALLBACK_SECRET:}
+  # 불러오기 서버가 부를 수 있는 이 백엔드 바깥 주소(https://...). 비어 있으면(로컬) 콜백 없이 직접 조회만
+  callback-base-url: ${IMPORTER_CALLBACK_BASE_URL:}
+  per-hour: ${IMPORTER_PER_HOUR:20}   # 한 사람 1시간 불러오기 수, 넘으면 429
+
 harvester:
   # 학교 장학 수집기(policy-harvester, sanvit). 키는 Harvester 관리자 화면에서 발급(90일 만료)
   base-url: ${HARVESTER_BASE_URL:}

@@ -63,6 +63,9 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 | `PWC_LLM_BASE_URL`, `PWC_LLM_API_KEY` | (없음) | PwC LLM 게이트웨이(OpenAI 방식). 글 조건 AI 변환에 쓴다. 주간 사용 한도가 있다. 없으면 변환 API가 503, 판정은 원래대로 |
 | `PWC_LLM_MODEL`, `PWC_LLM_REVIEW_MODEL` | `openai.gpt-4.1-mini`, `openai.gpt-4.1` | 1차 변환 모델, 애매한 것만 다시 보는 2차 모델. 이름 앞에 `openai.`가 붙는다(목록 API는 막혀 있음, 실측으로 확인: `openai.gpt-4o(-mini)`, `openai.gpt-4.1(-mini)`, `openai.gpt-5(-mini/-nano)`) |
 | `PWC_LLM_DAILY_TOKEN_LIMIT` | `3000000` | 하루(한국 시간) AI 토큰 한도. 넘으면 다음 날까지 AI를 안 부른다(검색은 단어로, 변환은 다음 수집 때). 주간 $50 보호용. 0이면 제한 없음 |
+| `IMPORTER_BASE_URL`, `IMPORTER_API_KEY` | (없음) | 링크 불러오기 서버(크롤러, AI 팀원) 주소와 백엔드용 키. 없으면 `POST /api/v1/me/imports`가 503 `IMPORT_UNAVAILABLE`(화면은 직접 입력으로) |
+| `IMPORTER_CALLBACK_SECRET`, `IMPORTER_CALLBACK_BASE_URL` | (없음) | 결과 콜백 서명 공유 비밀키(불러오기 서버와 같은 값), 불러오기 서버가 부를 이 백엔드 바깥 주소(`https://…`). 둘 중 하나라도 비면(로컬) 콜백 없이 직접 조회만 |
+| `IMPORTER_PER_HOUR` | `20` | 한 사람 1시간 링크 불러오기 수. 넘으면 429 `RATE_LIMITED` |
 | `SEARCH_RATE_PER_MINUTE`, `SEARCH_RATE_PER_IP_PER_MINUTE`, `SEARCH_AI_PER_HOUR` | `30`, `300`, `30` | 검색 사용량 제한: 한 사람(IP+기기) 1분, 한 IP 전체(같은 와이파이) 1분 — 넘으면 429 `RATE_LIMITED`. 한 사람 1시간 AI 해석 수 — 넘으면 단어 검색(오류 아님, `notice`로 안내) |
 | `APP_WEB_URL` | `http://localhost:5173` | 프론트 주소. 알림 메일의 "알림함에서 보기" 링크에 쓴다. 배포하면 프론트 주소로 |
 | `MAIL_DAILY_LIMIT` | `450` | 하루(한국 시각) 보낼 메일 수. Gmail은 하루 약 500통이 넘으면 계정을 막아서 그 전에 멈춘다(가입은 503 `MAIL_BUSY`) |
@@ -126,6 +129,8 @@ docker compose up -d --no-build
 | `POST`·`PATCH`·`DELETE /api/v1/me/applications/{id}/items[/{itemId}]` | 서류 추가 `{"content"}` · 체크 `{"checked": true}`·이름 수정 · 삭제 |
 | `POST /api/v1/me/custom-policies` | 공고 직접 등록(WF07 1차) `{title, organization, applyEndDate, applyEndTime: "18:00", category, memo, applyUrl, documents: ["재학증명서"], status}` — 공고명만 필수. 나만 보이는 공고가 생기고 준비함에 바로 담김(응답은 준비함 상세, `source: "USER"`). 판정 없음, D-day·마감 임박 알림·체크리스트는 됨 |
 | `PUT`·`DELETE /api/v1/me/custom-policies/{policyId}` | 직접 등록 공고 수정(보낸 값 전체로, 남은 서류의 체크는 유지)·삭제. 준비함에서 빼도 공고째 지워진다 |
+| `POST /api/v1/me/imports` | 링크 불러오기 시작(WF07 2차) `{url}` → 202 `{id, status: "QUEUED"}`. 불러오기 서버가 없거나 꺼져 있으면 503 `IMPORT_UNAVAILABLE`, 1시간 20번 넘으면 429 |
+| `GET /api/v1/me/imports/{id}` | 불러오기 상태. 2초마다 부른다. `QUEUED`·`RUNNING` → `SUCCEEDED`(`prefill`: 공고 직접 등록 입력칸 그대로, 못 찾은 칸은 null → 사용자가 확인 후 `POST /me/custom-policies`) 또는 `FAILED`(`error.code`·`message`, 화면에 그대로) |
 | `GET /api/v1/search?q=서울 사는 대학생 월세&includeNoMatch=&page=&size=` | 자연어 검색(WF06). 지금 신청 가능한 공고를 찾아 내 프로필로 판정. `understood`는 알아들은 조건(화면 칩): `keywords`(찾는 것 단어 묶음), `audience`(누구), `categories`, `region`, `age`, `closingSoon`, `ai`(false면 AI 없이 단어로 찾음). 기본은 불일치 제외. 결과가 없으면 `message`(WF06-b: "부산에서는 못 찾았어요. 지역을 빼면 n개 있어요") |
 | `GET /api/v1/policies/{id}/eligibility` | 공고 하나의 조건별 판정(WF03): 공고 요구사항, 내 값, 참/거짓/미확인, 근거, 채우면 다시 판정되는 항목. `summary`는 카드용 짧은 이유(최종 디자인 "기관 · 소득 정보 확인 필요"의 "·" 뒤: "나이·지역 조건 일치", "지역 조건 불일치", "소득 정보 확인 필요", "예술인 확인 필요"), `explanation`은 상세용 한 문장("소득을 입력하면 바로 확인돼요", "예술인은 공고 원문에서 확인해 주세요") |
 
@@ -237,6 +242,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `policy/PolicyController` | 목록·상세 API |
 | `profile/` | 사용자 프로필 엔티티·저장·검증, `/me` API |
 | `code/OntongCodes`, `CodeController` | 공식 코드정의서의 사용자 선택 코드와 이름, 선택지 API |
+| `importer/` | 링크 불러오기: 불러오기 서버 호출(`ImporterClient`), 작업·콜백 서명 확인·직접 조회(`ImportJobService`), 결과 → 입력칸(`ImportPrefill`) |
 | `application/` | 준비함: 관심 저장, 상태, 서류 체크리스트, 제출 서류 글 → 항목 쪼개기, 서류 변경 반영(`ChecklistSync`), 공고 직접 등록(`CustomPolicyService`) |
 | `notification/` | 공고 변경 감지(`PolicyDiff`), 변경 이력·알림 저장(`PolicyChangeRecorder`), 알림함 API |
 | `eligibility/` | 3값 판정: 조건 나무(`Condition`), 판정기(`ConditionEvaluator`), 온통청년·학교 장학 → 조건 변환, 글 조건 AI 변환(`AiConditionConverter`·`AiConditionService`), 맞춤 목록 API |
@@ -459,7 +465,24 @@ PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_con
 - 같은 `policies` 테이블에 `source = USER`, `owner_id`(등록한 사람)로 저장한다. 공개 목록·맞춤·새 공고 알림 조회(`PolicyRepository.OPEN`)는
   `owner_id is null`만 보므로 나오지 않고, 상세·판정·준비함 담기는 주인이 아니면 404.
 - 서류 목록은 학교 장학처럼 정리된 목록(`checklist_documents`)으로 저장해 체크리스트가 그대로 만들어진다.
-- 로그인하면 계정으로 옮겨지고, 내 데이터 삭제·탈퇴 때 같이 지워진다. 링크 불러오기·캡처 읽기(WF07 2차)는 AI가 이 입력값을 채워 주는 방식으로 붙인다.
+- 로그인하면 계정으로 옮겨지고, 내 데이터 삭제·탈퇴 때 같이 지워진다.
+
+### 링크 불러오기 (WF07 2차)
+
+설계: [공고 불러오기 API 설계](https://claude.ai/artifact/928VGH3xNXfGR59HbnPYmr) (백엔드 ↔ 불러오기 서버). 불러오기 서버(크롤러)는 AI 팀원이 만든다.
+
+1. 프론트 `POST /me/imports {url}` → 백엔드가 작업(`import_jobs`, id = `requestId`)을 저장하고 불러오기 서버 `POST /v1/import-jobs`에 맡긴 뒤 202.
+   작업을 먼저 저장(커밋)하고 보내서 콜백이 먼저 와도 안 놓친다. 연결이 끊기면 같은 `requestId`로 1초·3초 뒤 다시 보낸다.
+2. 불러오기 서버가 `POST /api/v1/internal/import-jobs/{id}/result`로 결과를 보낸다(문서에서 숨김). `X-Timestamp`(유닉스 초, 5분 넘게 차이 나면 401)와
+   `X-Signature` = HMAC-SHA256(공유 키, `"{X-Timestamp}.{본문 그대로}"`) 16진수를 확인한다. 이미 끝난 작업이면 처음 것만 쓰고 200.
+3. 프론트는 `GET /me/imports/{id}`를 2초마다 부른다. 콜백이 30초 안에 안 오거나 콜백을 못 받는 곳(로컬)이면 백엔드가 `GET /v1/import-jobs/{id}`로
+   직접 묻는다(3초에 한 번까지). 3분 넘게 안 끝나면 `TIMEOUT`, 불러오기 서버에서 작업이 사라졌으면(404) `INTERNAL`.
+- 결과 칸은 규칙에 안 맞으면 null(날짜 `YYYY-MM-DD`·시각 `HH:mm`이 아니거나 없는 날짜, 목록 밖 분류, 마감일 없는 시각). 입력칸보다 길면 자른다(공고명·기관 100자, 메모 2,000자).
+  원문 링크가 없거나 이상하면 사용자가 준 링크.
+- 실패 코드는 `FETCH_FAILED NOT_A_NOTICE UNREADABLE_IMAGE TIMEOUT INTERNAL`만, 모르는 코드는 `INTERNAL`. 메시지가 비었거나 200자가 넘으면 백엔드 기본 문구.
+- `localhost`·내부망 IP(10.x, 192.168.x, 169.254.x 등)·`.local` 주소는 400 — 불러오기 서버가 대신 내부 주소를 열지 않게. 도메인 이름이 내부 IP로 풀리는 경우는 불러오기 서버 쪽에서 막아야 한다.
+- 지난 작업은 일주일 뒤 지운다. 로그인하면 계정으로 옮기고, 내 데이터 삭제·탈퇴 때 지운다. V18.
+- 캡처 올리기(`type=image`, multipart)는 같은 구조로 붙일 수 있게 `type` 칸만 두었다(담당 정해지면).
 
 ### 알려진 원본 문제
 
