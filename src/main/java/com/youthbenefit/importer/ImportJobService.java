@@ -17,10 +17,12 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -29,7 +31,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 링크 불러오기 (WF07 2차). 백엔드는 작업을 불러오기 서버에 맡기고 바로 답한다. 결과는 불러오기 서버가 콜백으로 보내 주고(서명 확인),
+ * 링크·캡처 불러오기 (WF07 2차). 백엔드는 작업을 불러오기 서버에 맡기고 바로 답한다. 결과는 불러오기 서버가 콜백으로 보내 주고(서명 확인),
  * 콜백이 30초 안에 안 오거나 콜백을 못 받는 곳(로컬)이면 프론트가 상태를 물어볼 때 백엔드가 불러오기 서버에 직접 물어본다.
  * 결과는 공고 직접 등록 입력칸 모양({@link ImportPrefill})이고, 등록은 사용자가 확인한 뒤 POST /api/v1/me/custom-policies 로 한다.
  */
@@ -64,6 +66,9 @@ public class ImportJobService {
 
 	private static final int MESSAGE_MAX = 200;
 
+	/** 불러오기 서버가 받는 사진 크기 (10MiB) */
+	static final int IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
 	private final ImportJobRepository repository;
 
 	private final ImporterClient client;
@@ -83,15 +88,15 @@ public class ImportJobService {
 		this.clock = clock;
 	}
 
-	/** 화면용 작업 상태. prefill 은 SUCCEEDED 일 때만, error 는 FAILED 일 때만. */
+	/** 화면용 작업 상태. url 은 링크일 때만, prefill 은 SUCCEEDED 일 때만, error 는 FAILED 일 때만. */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
-	public record ImportView(UUID id, ImportJob.Status status, String url, ImportPrefill prefill, ImportError error,
-			Instant createdAt) {
+	public record ImportView(UUID id, ImportJob.Type type, ImportJob.Status status, String url, ImportPrefill prefill,
+			ImportError error, Instant createdAt) {
 
 		static ImportView of(ImportJob job) {
 			ImportError error = job.getStatus() == ImportJob.Status.FAILED
 					? new ImportError(job.getErrorCode(), job.getErrorMessage()) : null;
-			return new ImportView(job.getId(), job.getStatus(), job.getSourceUrl(), job.prefill(), error,
+			return new ImportView(job.getId(), job.getType(), job.getStatus(), job.getSourceUrl(), job.prefill(), error,
 					job.getCreatedAt());
 		}
 
@@ -104,22 +109,59 @@ public class ImportJobService {
 	/** 링크 불러오기 시작. 불러오기 서버가 꺼져 있거나 설정이 없으면 503 IMPORT_UNAVAILABLE (화면은 직접 입력으로). */
 	public ImportView start(UUID owner, String rawUrl) {
 		String url = checkUrl(rawUrl);
+		return submit(ImportJob.url(owner, url, clock.instant()),
+				job -> client.submitUrl(job.getId(), url, callbackUrl(job.getId())),
+				Map.of("url", "이 링크는 불러올 수 없어요. 직접 입력해 주세요"));
+	}
+
+	/** 캡처 불러오기 시작. PNG·JPG·WEBP 10MB 이하만 (파일 내용으로 확인). */
+	public ImportView startImage(UUID owner, byte[] image) {
+		if (image == null || image.length == 0) {
+			throw new InvalidRequestException(Map.of("image", "사진을 올려 주세요"));
+		}
+		if (image.length > IMAGE_MAX_BYTES) {
+			throw new InvalidRequestException(Map.of("image", "10MB 이하 사진만 올릴 수 있어요"));
+		}
+		MediaType type = imageType(image);
+		if (type == null) {
+			throw new InvalidRequestException(Map.of("image", "PNG·JPG·WEBP 사진만 올릴 수 있어요"));
+		}
+		return submit(ImportJob.image(owner, clock.instant()),
+				job -> client.submitImage(job.getId(), image, type, callbackUrl(job.getId())),
+				Map.of("image", "이 사진은 읽을 수 없어요. 다른 사진을 올리거나 직접 입력해 주세요"));
+	}
+
+	private ImportView submit(ImportJob job, Consumer<ImportJob> send, Map<String, String> rejectedError) {
 		if (!properties.configured()) {
 			throw unavailable();
 		}
-		Instant now = clock.instant();
-		repository.deleteCreatedBefore(now.minus(KEEP));
+		repository.deleteCreatedBefore(job.getCreatedAt().minus(KEEP));
 		// 콜백이 작업 저장보다 먼저 올 수 있어서 먼저 저장(커밋)하고 보낸다
-		ImportJob job = repository.save(ImportJob.url(owner, url, now));
+		repository.save(job);
 		try {
-			client.submitUrl(job.getId(), url, callbackUrl(job.getId()));
+			send.accept(job);
 		}
 		catch (ImporterException ex) {
-			log.warn("링크 불러오기 작업 만들기 실패 {}: {}", job.getId(), ex.getMessage());
+			log.warn("불러오기 작업 만들기 실패 {}: {}", job.getId(), ex.getMessage());
 			repository.delete(job);
-			throw unavailable();
+			throw ex.isRejected() ? new InvalidRequestException(rejectedError) : unavailable();
 		}
 		return ImportView.of(job);
+	}
+
+	/** 파일 앞부분으로 사진 종류를 본다 (이름·Content-Type 은 믿지 않는다). 모르는 형식이면 null */
+	static MediaType imageType(byte[] b) {
+		if (b.length >= 8 && (b[0] & 0xFF) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') {
+			return MediaType.IMAGE_PNG;
+		}
+		if (b.length >= 3 && (b[0] & 0xFF) == 0xFF && (b[1] & 0xFF) == 0xD8 && (b[2] & 0xFF) == 0xFF) {
+			return MediaType.IMAGE_JPEG;
+		}
+		if (b.length >= 12 && b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F' && b[8] == 'W' && b[9] == 'E'
+				&& b[10] == 'B' && b[11] == 'P') {
+			return MediaType.parseMediaType("image/webp");
+		}
+		return null;
 	}
 
 	/** 작업 상태. 아직 안 끝났으면 필요할 때 불러오기 서버에 직접 물어본다. */

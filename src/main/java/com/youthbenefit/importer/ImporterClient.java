@@ -6,9 +6,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -16,7 +22,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 링크 불러오기 서버(AI 팀원) 호출. 모든 요청에 X-API-Key 헤더. 작업 만들기는 같은 requestId 로 다시 보내도 같은 작업이라 연결이
+ * 공고 불러오기 서버(AI 팀원, policy-harvester 안) 호출. 링크와 캡처 둘 다. 모든 요청에 X-API-Key 헤더. 작업 만들기는 같은 requestId 로 다시 보내도 같은 작업이라 연결이
  * 끊기면 다시 보낸다.
  */
 @Component
@@ -65,6 +71,27 @@ public class ImporterClient {
 			.body(String.class));
 	}
 
+	/** 캡처 불러오기 작업 만들기. multipart 로 requestId·type=image·callbackUrl(있으면)·image 파일을 보낸다. */
+	public void submitImage(UUID requestId, byte[] image, MediaType type, String callbackUrl) {
+		checkConfigured();
+		MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+		body.add("requestId", requestId.toString());
+		body.add("type", "image");
+		if (callbackUrl != null) {
+			body.add("callbackUrl", callbackUrl);
+		}
+		HttpHeaders imageHeaders = new HttpHeaders();
+		imageHeaders.setContentType(type);
+		imageHeaders.setContentDispositionFormData("image", "capture." + type.getSubtype());
+		body.add("image", new HttpEntity<>(new ByteArrayResource(image), imageHeaders));
+		request("캡처 작업 만들기", () -> restClient.post()
+			.uri("/v1/import-jobs")
+			.contentType(MediaType.MULTIPART_FORM_DATA)
+			.body(body)
+			.retrieve()
+			.body(String.class));
+	}
+
 	/** 작업 결과 직접 조회. 콜백과 같은 모양. 없는 작업(24시간 지나 지워짐 등)이면 null. */
 	public JsonNode fetch(UUID requestId) {
 		checkConfigured();
@@ -95,7 +122,10 @@ public class ImporterClient {
 			}
 			catch (HttpClientErrorException ex) {
 				// 400(형식)·401(키)·413(크기) 은 다시 보내도 같다
-				throw new ImporterException("불러오기 서버 오류 " + ex.getStatusCode().value() + " (" + what + ")", ex);
+				boolean rejected = ex.getStatusCode().isSameCodeAs(HttpStatus.BAD_REQUEST)
+						|| ex.getStatusCode().isSameCodeAs(HttpStatus.CONTENT_TOO_LARGE);
+				throw new ImporterException("불러오기 서버 오류 " + ex.getStatusCode().value() + " (" + what + ")", ex,
+						rejected);
 			}
 			catch (RestClientException ex) {
 				if (failures >= RETRY_DELAYS.size()) {

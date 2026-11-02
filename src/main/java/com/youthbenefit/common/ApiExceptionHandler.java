@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.exc.MismatchedInputException;
@@ -93,6 +94,13 @@ public class ApiExceptionHandler {
 			return "목록([...]) 이어야 합니다";
 		}
 		return "값의 형식이 맞지 않습니다";
+	}
+
+	/** 올린 파일이 업로드 한도(spring.servlet.multipart)보다 큼 */
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	@ResponseStatus(HttpStatus.CONTENT_TOO_LARGE)
+	public ErrorResponse tooLarge(MaxUploadSizeExceededException ex) {
+		return new ErrorResponse("파일이 너무 커요. 10MB 이하로 올려 주세요.", Map.of());
 	}
 
 	@ExceptionHandler(MissingRequestHeaderException.class)

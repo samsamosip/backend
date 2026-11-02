@@ -12,13 +12,16 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @Tag(name = "공고 직접 등록", description = "WF07 1차: 손으로 입력한 공고를 준비함에 담기")
 @RestController
@@ -51,7 +54,21 @@ public class ImportController {
 		return ResponseEntity.status(HttpStatus.ACCEPTED).body(service.start(owner, request.url()));
 	}
 
-	@Operation(summary = "링크 불러오기 상태",
+	@Operation(summary = "캡처 불러오기 시작",
+			description = "multipart/form-data 의 image 칸에 공고 화면 사진(PNG·JPG·WEBP, 10MB 이하)을 올린다. 그다음은 링크 불러오기와 같다 "
+					+ "(202 → GET /api/v1/me/imports/{id} 를 2초마다). 캡처는 prefill.applyUrl 이 비어 있다. "
+					+ "사진이 아니거나 크면 400(errors.image), 1시간 20번은 링크와 합쳐서 센다")
+	@PostMapping(value = "/api/v1/me/imports/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	public ResponseEntity<ImportJobService.ImportView> startImage(@CurrentOwner UUID owner,
+			@RequestPart(name = "image", required = false) MultipartFile image) throws IOException {
+		if (!perOwner.tryAcquire(owner.toString())) {
+			throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", "불러오기가 너무 잦아요. 잠시 후 다시 해 주세요.");
+		}
+		return ResponseEntity.status(HttpStatus.ACCEPTED)
+			.body(service.startImage(owner, image == null ? null : image.getBytes()));
+	}
+
+	@Operation(summary = "불러오기 상태",
 			description = "status: QUEUED·RUNNING(기다리는 중) → SUCCEEDED(prefill: title·organization·applyEndDate·applyEndTime·"
 					+ "category·memo·applyUrl — 공고 직접 등록 입력칸 그대로, 못 찾은 칸은 null) 또는 FAILED(error.code·message). "
 					+ "3분 넘게 안 끝나면 FAILED TIMEOUT")

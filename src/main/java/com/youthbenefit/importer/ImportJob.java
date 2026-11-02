@@ -13,7 +13,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 링크 불러오기 작업 하나. id 는 불러오기 서버에 보내는 requestId. */
+/** 공고 불러오기(링크·캡처) 작업 하나. id 는 불러오기 서버에 보내는 requestId. */
 @Entity
 @Table(name = "import_jobs")
 @Getter
@@ -22,7 +22,7 @@ public class ImportJob {
 
 	public enum Type {
 
-		URL
+		URL, IMAGE
 
 	}
 
@@ -75,6 +75,16 @@ public class ImportJob {
 		job.ownerId = ownerId;
 		job.type = Type.URL;
 		job.sourceUrl = url;
+		job.status = Status.QUEUED;
+		job.createdAt = now;
+		return job;
+	}
+
+	static ImportJob image(UUID ownerId, Instant now) {
+		ImportJob job = new ImportJob();
+		job.id = UUID.randomUUID();
+		job.ownerId = ownerId;
+		job.type = Type.IMAGE;
 		job.status = Status.QUEUED;
 		job.createdAt = now;
 		return job;

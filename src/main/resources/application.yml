@@ -11,6 +11,11 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/youthbenefit}
     username: ${DB_USERNAME:youthbenefit}
     password: ${DB_PASSWORD:youthbenefit}
+  servlet:
+    multipart:
+      # 캡처 불러오기 사진 (불러오기 서버가 10MB 까지 받는다)
+      max-file-size: 10MB
+      max-request-size: 11MB
   jpa:
     open-in-view: false
     hibernate:

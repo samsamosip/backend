@@ -2,9 +2,11 @@ package com.youthbenefit.importer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import tools.jackson.databind.json.JsonMapper;
 
 class ImportPrefillTest {
@@ -59,6 +61,18 @@ class ImportPrefillTest {
 				""".formatted("가".repeat(300), "나".repeat(3000))), null);
 		assertThat(p.title()).hasSize(100);
 		assertThat(p.memo()).hasSize(2000);
+	}
+
+	@Test
+	void imageTypeComesFromFileContent() {
+		assertThat(ImportJobService.imageType(new byte[] { (byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A }))
+			.isEqualTo(MediaType.IMAGE_PNG);
+		assertThat(ImportJobService.imageType(new byte[] { (byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0 }))
+			.isEqualTo(MediaType.IMAGE_JPEG);
+		assertThat(ImportJobService.imageType("RIFF0000WEBPVP8 ".getBytes(StandardCharsets.US_ASCII)))
+			.hasToString("image/webp");
+		assertThat(ImportJobService.imageType("GIF89a".getBytes(StandardCharsets.US_ASCII))).isNull();
+		assertThat(ImportJobService.imageType(new byte[0])).isNull();
 	}
 
 	@Test

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -29,6 +30,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -219,12 +221,72 @@ class ImportApiIntegrationTest {
 	}
 
 	@Test
+	void captureIsSentAsImageAndFillsFieldsWithoutLink() throws Exception {
+		byte[] png = png();
+		String id = JsonPath.read(mockMvc
+			.perform(multipart("/api/v1/me/imports/image")
+				.file(new MockMultipartFile("image", "아무이름.txt", "text/plain", png))
+				.header("X-Anonymous-Id", me))
+			.andExpect(status().isAccepted())
+			.andExpect(jsonPath("$.type").value("IMAGE"))
+			.andExpect(jsonPath("$.status").value("QUEUED"))
+			.andExpect(jsonPath("$.url").doesNotExist())
+			.andReturn()
+			.getResponse()
+			.getContentAsString(), "$.id");
+		// 파일 이름·형식이 아니라 내용으로 PNG 를 알아본다
+		verify(client).submitImage(eq(UUID.fromString(id)), eq(png), eq(MediaType.IMAGE_PNG),
+				eq("https://api.example/api/v1/internal/import-jobs/" + id + "/result"));
+
+		callback(id, """
+				{"requestId": "%s", "status": "succeeded", "result": {"title": "학생 근로장학", "applyEndDate": "2026-11-30",
+				 "sourceUrl": null}}
+				""".formatted(id)).andExpect(status().isOk());
+		job(me, id).andExpect(jsonPath("$.status").value("SUCCEEDED"))
+			.andExpect(jsonPath("$.prefill.title").value("학생 근로장학"))
+			.andExpect(jsonPath("$.prefill.applyUrl").doesNotExist());
+	}
+
+	@Test
+	void badCapturesAreRefused() throws Exception {
+		mockMvc.perform(multipart("/api/v1/me/imports/image").header("X-Anonymous-Id", me))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.errors.image").value("사진을 올려 주세요"));
+		mockMvc.perform(multipart("/api/v1/me/imports/image")
+			.file(new MockMultipartFile("image", "a.png", "image/png", "그냥 글자".getBytes(StandardCharsets.UTF_8)))
+			.header("X-Anonymous-Id", me))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.errors.image").value("PNG·JPG·WEBP 사진만 올릴 수 있어요"));
+		byte[] big = new byte[10 * 1024 * 1024 + 1];
+		System.arraycopy(png(), 0, big, 0, 8);
+		mockMvc.perform(multipart("/api/v1/me/imports/image")
+			.file(new MockMultipartFile("image", "a.png", "image/png", big))
+			.header("X-Anonymous-Id", me)).andExpect(status().is4xxClientError());
+		verify(client, never()).submitImage(any(), any(), any(), any());
+
+		// 불러오기 서버가 사진을 거절하면(400) 서버 장애가 아니라 사진 문제로 알려 준다
+		doThrow(new ImporterException("거절", null, true)).when(client).submitImage(any(), any(), any(), any());
+		mockMvc.perform(multipart("/api/v1/me/imports/image")
+			.file(new MockMultipartFile("image", "a.png", "image/png", png()))
+			.header("X-Anonymous-Id", me))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.errors.image").exists());
+		assertThat(jdbc.queryForObject("select count(*) from import_jobs", Integer.class)).isZero();
+	}
+
+	@Test
 	void tooManyImportsAreLimited() throws Exception {
 		String someone = UUID.randomUUID().toString();
 		for (int i = 0; i < 5; i++) {
 			start(someone, LINK).andExpect(status().isAccepted());
 		}
 		start(someone, LINK).andExpect(status().isTooManyRequests()).andExpect(jsonPath("$.code").value("RATE_LIMITED"));
+	}
+
+	private static byte[] png() {
+		byte[] b = new byte[64];
+		System.arraycopy(new byte[] { (byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A }, 0, b, 0, 8);
+		return b;
 	}
 
 	private ResultActions start(String owner, String url) throws Exception {
