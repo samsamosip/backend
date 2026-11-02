@@ -1,6 +1,7 @@
 package com.youthbenefit.auth;
 
 import com.youthbenefit.common.ApiException;
+import com.youthbenefit.stats.UsageRecorder;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import org.springframework.web.method.support.ModelAndViewContainer;
  * <ul>
  * <li>Bearer 토큰이 있으면 그 계정(틀리거나 만료면 401 — 익명으로 넘어가지 않는다)</li>
  * <li>없으면 X-Anonymous-Id. 단, 계정의 UUID 를 헤더로 보내면 401 LOGIN_REQUIRED (UUID 만 알아서는 계정 데이터에 못 들어온다)</li>
+ * <li>찾은 사람은 사용 통계에 오늘 방문으로 남긴다({@link UsageRecorder})</li>
  * </ul>
  */
 @RequiredArgsConstructor
@@ -28,6 +30,9 @@ class OwnerArgumentResolver implements HandlerMethodArgumentResolver {
 	private final TokenService tokenService;
 
 	private final UserRepository users;
+
+	/** 사용 통계: 누가 오늘 썼는지 */
+	private final UsageRecorder usage;
 
 	@Override
 	public boolean supportsParameter(MethodParameter parameter) {
@@ -45,6 +50,7 @@ class OwnerArgumentResolver implements HandlerMethodArgumentResolver {
 			return claims.userId();
 		}
 		if (claims != null) {
+			usage.visit(claims.ownerId());
 			return claims.ownerId();
 		}
 		boolean required = parameter.getParameterAnnotation(CurrentOwner.class).required();
@@ -65,6 +71,7 @@ class OwnerArgumentResolver implements HandlerMethodArgumentResolver {
 		if (users.existsByOwnerId(anonymousId)) {
 			throw loginRequired();
 		}
+		usage.visit(anonymousId);
 		return anonymousId;
 	}
 

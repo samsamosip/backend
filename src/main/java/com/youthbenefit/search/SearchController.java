@@ -4,6 +4,7 @@ import com.youthbenefit.auth.CurrentOwner;
 import com.youthbenefit.common.ApiException;
 import com.youthbenefit.common.InvalidRequestException;
 import com.youthbenefit.common.RateLimiter;
+import com.youthbenefit.stats.UsageRecorder;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,11 +34,14 @@ public class SearchController {
 	/** 한 사람이 1시간에 AI 해석을 쓸 수 있는 수. 넘으면 단어 검색으로 (오류 아님) */
 	private final RateLimiter aiPerClient;
 
-	public SearchController(SearchService service, Clock clock,
+	private final UsageRecorder usage;
+
+	public SearchController(SearchService service, UsageRecorder usage, Clock clock,
 			@Value("${search.rate-limit.per-minute:30}") int perMinute,
 			@Value("${search.rate-limit.per-ip-per-minute:300}") int perIpPerMinute,
 			@Value("${search.rate-limit.ai-per-hour:30}") int aiPerHour) {
 		this.service = service;
+		this.usage = usage;
 		this.perClient = new RateLimiter(perMinute, Duration.ofMinutes(1), clock);
 		this.perIp = new RateLimiter(perIpPerMinute, Duration.ofMinutes(1), clock);
 		this.aiPerClient = new RateLimiter(aiPerHour, Duration.ofHours(1), clock);
@@ -66,6 +70,7 @@ public class SearchController {
 		if (!perIp.tryAcquire(ip) || !perClient.tryAcquire(client)) {
 			throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", "검색이 너무 잦아요. 잠시 후 다시 해 주세요.");
 		}
+		usage.count(UsageRecorder.SEARCH);
 		var removed = new SearchService.Removed(noRegion, noCategory, noAge, noClosingSoon, drop == null ? List.of() : drop);
 		return service.search(owner, q, removed, includeNoMatch, Math.max(page, 0), Math.clamp(size, 1, 100),
 				aiPerClient.tryAcquire(client));

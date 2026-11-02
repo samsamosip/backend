@@ -20,12 +20,16 @@ class AuthWebConfig implements WebMvcConfigurer {
 
 	private final AuthRateLimitInterceptor rateLimit;
 
-	AuthWebConfig(TokenService tokenService, UserRepository users, java.time.Clock clock,
+	private final com.youthbenefit.stats.UsageRecorder usage;
+
+	AuthWebConfig(TokenService tokenService, UserRepository users, com.youthbenefit.stats.UsageRecorder usage,
+			java.time.Clock clock,
 			tools.jackson.databind.json.JsonMapper jsonMapper,
 			@org.springframework.beans.factory.annotation.Value("${app.auth.rate-limit.mail-per-hour:20}") int mailPerHour,
 			@org.springframework.beans.factory.annotation.Value("${app.auth.rate-limit.attempts-per-10-minutes:60}") int attempts) {
 		this.tokenService = tokenService;
 		this.users = users;
+		this.usage = usage;
 		this.rateLimit = new AuthRateLimitInterceptor(mailPerHour, attempts, clock, jsonMapper);
 	}
 
@@ -36,7 +40,7 @@ class AuthWebConfig implements WebMvcConfigurer {
 
 	@Override
 	public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
-		resolvers.add(new OwnerArgumentResolver(tokenService, users));
+		resolvers.add(new OwnerArgumentResolver(tokenService, users, usage));
 	}
 
 }

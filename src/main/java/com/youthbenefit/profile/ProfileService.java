@@ -6,6 +6,7 @@ import com.youthbenefit.notification.NotificationRepository;
 import com.youthbenefit.notification.NotificationSettingsRepository;
 import com.youthbenefit.common.InvalidRequestException;
 import com.youthbenefit.importer.ImportJobRepository;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import com.youthbenefit.policy.Categories;
 import com.youthbenefit.policy.PolicyRepository;
 import com.youthbenefit.policy.Regions;
@@ -53,6 +54,8 @@ public class ProfileService {
 	private final PolicyRepository policyRepository;
 
 	private final ImportJobRepository importJobRepository;
+
+	private final NamedParameterJdbcTemplate jdbc;
 
 	private final JsonMapper jsonMapper;
 
@@ -109,7 +112,7 @@ public class ProfileService {
 		}
 	}
 
-	/** 내 데이터 삭제: 프로필, 준비함, 직접 등록 공고, 링크 불러오기 기록, 알림 전부. 지울 게 하나도 없으면 false. */
+	/** 내 데이터 삭제: 프로필, 준비함, 직접 등록 공고, 불러오기 기록, 방문 기록, 알림 전부. 지울 게 하나도 없으면 false. */
 	@Transactional
 	public boolean delete(UUID anonymousId) {
 		long applications = applicationRepository.deleteByAnonymousId(anonymousId);
@@ -117,6 +120,7 @@ public class ProfileService {
 		applicationRepository.flush();
 		policyRepository.deleteCustomByOwner(anonymousId);
 		importJobRepository.deleteByOwner(anonymousId);
+		jdbc.update("delete from owner_activity where owner_id = :owner", Map.of("owner", anonymousId));
 		notificationSettingsRepository.deleteById(anonymousId);
 		boolean profile = repository.findByAnonymousId(anonymousId).map(p -> {
 			repository.delete(p);

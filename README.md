@@ -101,6 +101,7 @@ docker compose up -d --no-build
 |---|---|
 | `GET /api/v1/policies?category=&page=&size=` | 지금 신청할 수 있는 공고. 마감 임박순, 마감일 없는(상시) 공고는 뒤로. `size` 최대 100. 카드마다 `source`(ONTONG 정부 공고 / SCHOOL 학교 장학) |
 | `GET /api/v1/policies/{id}` | 공고 상세. 자격 조건은 온통청년 코드 그대로(`jobCd`, `schoolCd` 등). `sourceUrl` 원문 보기 링크(온통청년 상세 페이지·학교 장학 원문·직접 등록 링크), `documents` 제출 서류 목록(준비함 체크리스트와 같은 쪼개기), `support` 지원 금액(매월 지원이면 "월 최대 20만원 · 최대 24개월") |
+| `GET /api/v1/admin/stats` | 사용 통계(발표·사용자 평가용): 방문자(오늘·7일·전체·이틀 이상 다시 온 사람), 가입(이메일·카카오), 프로필, 준비함(상태별·직접 등록), 검색·링크·캡처 불러오기 횟수, 최근 14일 표 |
 | `POST /api/v1/admin/ontong/sync` | 온통청년 전체 수집. 결과 `{fetched, created, updated, unchanged}` |
 | `POST /api/v1/admin/harvester/sync` | 학교 장학 수집(`?full=true`면 목록 전체 비교). 결과 `{mode, seen, skippedOld, fetched, created, updated, unchanged, removed, failed}` |
 | `GET /api/v1/codes` | 온보딩 선택지(`jobCd`, `schoolCd`, `mrgSttsCd`, `plcyMajorCd`, `sbizCd`, `housingType`, `interestCategories`, 학교용 `enrollmentStatus`, `gpaScale`, `kosafIncomeBracket`)의 code·label |
@@ -243,6 +244,7 @@ Testcontainers로 PostgreSQL 17을 띄우며, Docker가 꺼져 있으면 건너�
 | `policy/PolicyController` | 목록·상세 API |
 | `profile/` | 사용자 프로필 엔티티·저장·검증, `/me` API |
 | `code/OntongCodes`, `CodeController` | 공식 코드정의서의 사용자 선택 코드와 이름, 선택지 API |
+| `stats/` | 사용 통계: 방문·횟수 기록(`UsageRecorder`, `@CurrentOwner` 를 찾을 때·검색·불러오기), 관리자 통계(`UsageStatsService`) |
 | `importer/` | 링크·캡처 불러오기: 불러오기 서버 호출(`ImporterClient`), 작업·콜백 서명 확인·직접 조회(`ImportJobService`), 결과 → 입력칸(`ImportPrefill`) |
 | `application/` | 준비함: 관심 저장, 상태, 서류 체크리스트, 제출 서류 글 → 항목 쪼개기, 서류 변경 반영(`ChecklistSync`), 공고 직접 등록(`CustomPolicyService`) |
 | `notification/` | 공고 변경 감지(`PolicyDiff`), 변경 이력·알림 저장(`PolicyChangeRecorder`), 알림함 API |
@@ -487,6 +489,15 @@ PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_con
 - 캡처: 프론트가 사진을 올리면 파일 앞부분으로 PNG·JPG·WEBP 를 확인(이름·형식은 안 믿음)하고, 불러오기 서버에 multipart(`requestId`, `type=image`,
   `callbackUrl`, `image`)로 그대로 넘긴다. 사진은 저장하지 않는다. 불러오기 서버가 사진을 거절하면(400·413) 503 이 아니라 400 `errors.image`.
   사용량 제한은 링크와 합쳐서 센다.
+
+### 사용 통계
+
+- **방문:** 내 정보가 필요한 API(맞춤·프로필·준비함·검색 등, `@CurrentOwner`)를 부른 사람을 한국 날짜로 하루 한 줄(`owner_activity`)에 남긴다.
+  같은 날 같은 사람은 메모리에서 걸러 DB 에 한 번만 쓴다. 공고 목록만 본 사람은 누군지 몰라서 안 센다.
+- **횟수:** 검색·링크·캡처 불러오기 횟수는 날짜별(`daily_counts`)로 센다.
+- **기록 시작:** 방문과 횟수는 V19(11/2)부터 쌓인다. 가입·프로필·준비함은 지금 DB 에 남은 것을 센다(내 데이터를 지운 사람은 빠진다).
+- **로그인·삭제:** 로그인하면 임시 ID 의 방문 기록을 계정으로 합쳐 한 사람으로 세고, 내 데이터 삭제 때 지운다. 기록이 실패해도 사용자 요청은 그대로 진행한다.
+- 사용자 평가 직전에 개발 중 쌓인 기록을 지우려면 `delete from owner_activity; delete from daily_counts;`.
 
 ### 알려진 원본 문제
 

@@ -3,6 +3,7 @@ package com.youthbenefit.importer;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.youthbenefit.common.ApiException;
 import com.youthbenefit.common.InvalidRequestException;
+import com.youthbenefit.stats.UsageRecorder;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
@@ -79,13 +80,16 @@ public class ImportJobService {
 
 	private final Clock clock;
 
+	private final UsageRecorder usage;
+
 	public ImportJobService(ImportJobRepository repository, ImporterClient client, ImporterProperties properties,
-			JsonMapper jsonMapper, Clock clock) {
+			JsonMapper jsonMapper, Clock clock, UsageRecorder usage) {
 		this.repository = repository;
 		this.client = client;
 		this.properties = properties;
 		this.jsonMapper = jsonMapper;
 		this.clock = clock;
+		this.usage = usage;
 	}
 
 	/** 화면용 작업 상태. url 은 링크일 때만, prefill 은 SUCCEEDED 일 때만, error 는 FAILED 일 때만. */
@@ -146,6 +150,7 @@ public class ImportJobService {
 			repository.delete(job);
 			throw ex.isRejected() ? new InvalidRequestException(rejectedError) : unavailable();
 		}
+		usage.count(job.getType() == ImportJob.Type.IMAGE ? UsageRecorder.IMPORT_IMAGE : UsageRecorder.IMPORT_URL);
 		return ImportView.of(job);
 	}
 

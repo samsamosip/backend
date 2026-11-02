@@ -35,6 +35,12 @@ public class AccountMergeService {
 		int apps = jdbc.update("update applications set anonymous_id = :to where anonymous_id = :from", p);
 		jdbc.update("update policies set owner_id = :to where owner_id = :from", p);
 		jdbc.update("update import_jobs set owner_id = :to where owner_id = :from", p);
+		// 사용 통계: 로그인 전과 후를 한 사람으로 센다
+		jdbc.update("""
+				delete from owner_activity a where a.owner_id = :from
+				  and exists (select 1 from owner_activity b where b.owner_id = :to and b.day = a.day)
+				""", p);
+		jdbc.update("update owner_activity set owner_id = :to where owner_id = :from", p);
 		jdbc.update("""
 				delete from notifications n where n.anonymous_id = :from and (
 				  exists (select 1 from notifications m where m.anonymous_id = :to and m.policy_change_id = n.policy_change_id)
