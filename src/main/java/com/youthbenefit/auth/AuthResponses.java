@@ -1,5 +1,6 @@
 package com.youthbenefit.auth;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.LocalDateTime;
 
 /** 로그인 응답 모양 모음. */
@@ -27,8 +28,17 @@ public final class AuthResponses {
 
 	}
 
-	/** 코드를 보냈다. expiresInSeconds 동안 쓸 수 있고, resendAfterSeconds 뒤에 다시 받을 수 있다. */
-	public record CodeSent(String email, long expiresInSeconds, long resendAfterSeconds) {
+	/**
+	 * 코드를 보냈다. expiresInSeconds 동안 쓸 수 있고, resendAfterSeconds 뒤에 다시 받을 수 있다. devCode 는 개발용 서버(메일 없음 +
+	 * AUTH_DEV_SHOW_CODE)에서만 오는 인증 코드 — 실제 서버에서는 없다.
+	 */
+	public record CodeSent(String email, long expiresInSeconds, long resendAfterSeconds,
+			@JsonInclude(JsonInclude.Include.NON_NULL) String devCode) {
+
+		public CodeSent(String email, long expiresInSeconds, long resendAfterSeconds) {
+			this(email, expiresInSeconds, resendAfterSeconds, null);
+		}
+
 	}
 
 	/** 비밀번호 찾기 코드가 맞았다. 이 통행증으로 expiresInSeconds 안에 새 비밀번호를 정한다. */

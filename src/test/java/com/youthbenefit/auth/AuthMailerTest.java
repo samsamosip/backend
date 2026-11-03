@@ -1,6 +1,10 @@
 package com.youthbenefit.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.youthbenefit.common.ApiException;
+import org.springframework.http.HttpStatus;
 
 import org.junit.jupiter.api.Test;
 
@@ -8,9 +12,23 @@ class AuthMailerTest {
 
 	@Test
 	void stopsBeforeGmailDailyLimit() {
-		AuthMailer noMail = new AuthMailer(new AuthProperties(null, 30, 14, null, null), 1);
+		AuthMailer noMail = new AuthMailer(new AuthProperties(null, 30, 14, null, null, false), 1);
 		// 메일 설정이 없으면(로컬) 한도를 보지 않는다
 		noMail.checkCapacity();
+	}
+
+	@Test
+	void mailServerFailureIsFriendly503() {
+		// 메일 통로가 막힌 서버처럼: 아무도 안 받는 주소로 보내면 바로 실패
+		AuthMailer blocked = new AuthMailer(new AuthProperties(null, 30, 14, null,
+				new AuthProperties.Mail("127.0.0.1", 1, "sender@example.com", "x", "청년혜택 길잡이"), true), 10);
+		assertThat(blocked.configured()).isTrue();
+		assertThatThrownBy(() -> blocked.sendCode("someone@example.com", VerificationCode.Purpose.SIGNUP, "123456"))
+			.isInstanceOfSatisfying(ApiException.class, ex -> {
+				assertThat(ex.status()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+				assertThat(ex.code()).isEqualTo("MAIL_FAILED");
+				assertThat(ex.getMessage()).isEqualTo("인증 메일을 보내지 못했어요. 잠시 후 다시 해 주세요.");
+			});
 	}
 
 	@Test

@@ -38,7 +38,13 @@ public class AuthMailer {
 			this.sender = null;
 			this.address = null;
 			this.fromName = null;
+			if (properties.devShowCode()) {
+				log.warn("개발용 설정 AUTH_DEV_SHOW_CODE 가 켜져 있어요: 인증 코드를 응답에 그대로 내려 줘요. 실제 서버에서는 끄세요");
+			}
 			return;
+		}
+		if (properties.devShowCode()) {
+			log.info("메일 설정이 있어서 AUTH_DEV_SHOW_CODE 는 무시해요 (인증 코드는 메일로만)");
 		}
 		JavaMailSenderImpl s = new JavaMailSenderImpl();
 		s.setHost(mail.host());
@@ -133,6 +139,12 @@ public class AuthMailer {
 		}
 		catch (MessagingException | java.io.UnsupportedEncodingException ex) {
 			throw new IllegalStateException("메일을 만들지 못했어요", ex);
+		}
+		catch (org.springframework.mail.MailException ex) {
+			// 메일 서버 연결 실패·로그인 실패 등 (예: 메일 통로를 막은 서버)
+			log.warn("{} 코드 메일 보내기 실패: {}", purpose, ex.getMessage());
+			throw new com.youthbenefit.common.ApiException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
+					"MAIL_FAILED", "인증 메일을 보내지 못했어요. 잠시 후 다시 해 주세요.");
 		}
 		// 보낸 기록 (주소는 앞 두 글자만)
 		log.info("{} 코드 메일 보냄 → {}***{}", purpose, email.substring(0, Math.min(2, email.indexOf('@'))),

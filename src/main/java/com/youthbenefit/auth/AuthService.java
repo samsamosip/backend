@@ -295,9 +295,18 @@ public class AuthService {
 		// 서버 전체 하루 메일 한도를 넘었으면 코드를 만들기 전에 멈춘다(보내지도 못한 코드가 1분 제한에 걸리지 않게)
 		mailer.checkCapacity();
 		String code = Secrets.newCode();
-		codes.save(new VerificationCode(email, purpose, Secrets.sha256(code), now.plus(CODE_TTL)));
-		mailer.sendCode(email, purpose, code);
-		return new CodeSent(email, CODE_TTL.toSeconds(), RESEND_AFTER.toSeconds());
+		VerificationCode saved = codes.save(new VerificationCode(email, purpose, Secrets.sha256(code), now.plus(CODE_TTL)));
+		try {
+			mailer.sendCode(email, purpose, code);
+		}
+		catch (ApiException ex) {
+			// 못 보낸 코드가 1분 제한·하루 10통에 걸리지 않게 지운다
+			codes.delete(saved);
+			throw ex;
+		}
+		// 개발용 서버(메일 없음)에서만 화면이 코드를 받을 수 있게
+		String devCode = properties.devShowCode() && !mailer.configured() ? code : null;
+		return new CodeSent(email, CODE_TTL.toSeconds(), RESEND_AFTER.toSeconds(), devCode);
 	}
 
 	/** 가장 최근 코드와 비교. 틀리면 시도 횟수를 늘리고(5번이면 무효) 남은 횟수를 알려 준다. */

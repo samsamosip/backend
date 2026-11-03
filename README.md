@@ -59,7 +59,8 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 | `JWT_SECRET` | (없음) | 로그인 토큰 서명 키(32자 이상 아무 문자열). 비우면 실행할 때마다 새 키라 서버를 다시 켜면 모두 로그아웃된다. **배포 서버에는 꼭 넣는다** |
 | `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET` | (없음) | 카카오 디벨로퍼스 REST API 키, Client Secret. 없으면 카카오 로그인이 503 `KAKAO_NOT_CONFIGURED` |
 | `KAKAO_REDIRECT_URIS` | `http://localhost:5173/auth/kakao/callback` | 프론트 카카오 콜백 주소(콤마 구분). 카카오 콘솔 Redirect URI와 같아야 하고, 여기 없는 주소는 400 |
-| `MAIL_USERNAME`, `MAIL_PASSWORD` | (없음) | 인증 코드 메일(Gmail이면 보내는 주소와 앱 비밀번호, `MAIL_HOST`·`MAIL_PORT`로 바꿀 수 있음). **비우면 메일 대신 서버 로그에 코드를 찍는다(개발용)** |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | (없음) | 메일 서버에 연결하지 못하면 503 `MAIL_FAILED`("인증 메일을 보내지 못했어요"), 못 보낸 코드는 지워서 1분 제한에 안 걸림. 인증 코드 메일(Gmail이면 보내는 주소와 앱 비밀번호, `MAIL_HOST`·`MAIL_PORT`로 바꿀 수 있음). **비우면 메일 대신 서버 로그에 코드를 찍는다(개발용)** |
+| `AUTH_DEV_SHOW_CODE` | `false` | **개발용 서버에서만** `true`: 메일 설정(`MAIL_USERNAME`)이 없을 때 인증 코드를 가입·코드 다시 받기·비밀번호 찾기 응답의 `devCode`로 내려 준다. 메일 설정이 있으면 무시. Render 무료 서버는 메일 통로(25·465·587)를 막아서 임시 서버에 켠다 |
 | `PWC_LLM_BASE_URL`, `PWC_LLM_API_KEY` | (없음) | PwC LLM 게이트웨이(OpenAI 방식). 글 조건 AI 변환에 쓴다. 주간 사용 한도가 있다. 없으면 변환 API가 503, 판정은 원래대로 |
 | `PWC_LLM_MODEL`, `PWC_LLM_REVIEW_MODEL` | `openai.gpt-4.1-mini`, `openai.gpt-4.1` | 1차 변환 모델, 애매한 것만 다시 보는 2차 모델. 이름 앞에 `openai.`가 붙는다(목록 API는 막혀 있음, 실측으로 확인: `openai.gpt-4o(-mini)`, `openai.gpt-4.1(-mini)`, `openai.gpt-5(-mini/-nano)`) |
 | `PWC_LLM_DAILY_TOKEN_LIMIT` | `3000000` | 하루(한국 시간) AI 토큰 한도. 넘으면 다음 날까지 AI를 안 부른다(검색은 단어로, 변환은 다음 수집 때). 주간 $50 보호용. 0이면 제한 없음 |
