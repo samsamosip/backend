@@ -23,6 +23,26 @@ class SupportTest {
 	}
 
 	@Test
+	void perUnitAmountsKeepTheirUnit() {
+		assertThat(Support.perUnit("아침밥 1식 1천원 지원")).isEqualTo("1식");
+		assertThat(Support.perUnit("학생 1식당 1천원 지원")).isEqualTo("1식");
+		assertThat(Support.perUnit("아침밥 1끼 지원")).isEqualTo("1식");
+		assertThat(Support.perUnit("청년 신규채용 1인당 지원")).isEqualTo("1인당");
+		assertThat(Support.perUnit("이사비 지원")).isNull();
+		assertThat(Support.perUnit(null)).isNull();
+		assertThat(Support.perUnit("아침밥 1식 1천원 지원") + " " + Support.label(1000, null, false, "CASH")).isEqualTo("1식 1,000원");
+	}
+
+	@Test
+	void summaryThatOnlyRepeatsTitleIsDropped() {
+		assertThat(Support.repeatsTitle("경제금융 토크콘서트", "청년 경제금융 토크콘서트")).isTrue();
+		assertThat(Support.repeatsTitle("월세지원", "2026 청년 월세 지원사업")).isTrue();
+		assertThat(Support.repeatsTitle("아침밥 1식 1천원 지원", "대학생 천원의 아침밥")).isFalse();
+		assertThat(Support.repeatsTitle(null, "제목")).isFalse();
+		assertThat(Support.repeatsTitle(" ", "제목")).isFalse();
+	}
+
+	@Test
 	void readsSupportMonths() {
 		assertThat(Support.months("월 최대 20만원씩 최대 12개월 지원")).isEqualTo(12);
 		assertThat(Support.months("임차료 월 최대 20만원씩 최대 24개월간 지원")).isEqualTo(24);

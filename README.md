@@ -60,6 +60,7 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 | `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET` | (없음) | 카카오 디벨로퍼스 REST API 키, Client Secret. 없으면 카카오 로그인이 503 `KAKAO_NOT_CONFIGURED` |
 | `KAKAO_REDIRECT_URIS` | `http://localhost:5173/auth/kakao/callback` | 프론트 카카오 콜백 주소(콤마 구분). 카카오 콘솔 Redirect URI와 같아야 하고, 여기 없는 주소는 400 |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | (없음) | 메일 서버에 연결하지 못하면 503 `MAIL_FAILED`("인증 메일을 보내지 못했어요"), 못 보낸 코드는 지워서 1분 제한에 안 걸림. 인증 코드 메일(Gmail이면 보내는 주소와 앱 비밀번호, `MAIL_HOST`·`MAIL_PORT`로 바꿀 수 있음). **비우면 메일 대신 서버 로그에 코드를 찍는다(개발용)** |
+| `KEEP_AWAKE_URL` | (없음) | **무료 서버(Render)에서만** 이 서버의 바깥 주소(`https://…onrender.com`). 10분마다 자기 `/actuator/health` 를 불러서 잠들지 않게 한다(Render 무료는 15분 동안 손님이 없으면 잠들고 깨는 데 1~2분). 정식 서버는 비워 둔다 |
 | `AUTH_DEV_SHOW_CODE` | `false` | **개발용 서버에서만** `true`: 메일 설정(`MAIL_USERNAME`)이 없을 때 인증 코드를 가입·코드 다시 받기·비밀번호 찾기 응답의 `devCode`로 내려 준다. 메일 설정이 있으면 무시. Render 무료 서버는 메일 통로(25·465·587)를 막아서 임시 서버에 켠다 |
 | `PWC_LLM_BASE_URL`, `PWC_LLM_API_KEY` | (없음) | PwC LLM 게이트웨이(OpenAI 방식). 글 조건 AI 변환에 쓴다. 주간 사용 한도가 있다. 없으면 변환 API가 503, 판정은 원래대로 |
 | `PWC_LLM_MODEL`, `PWC_LLM_REVIEW_MODEL` | `openai.gpt-4.1-mini`, `openai.gpt-4.1` | 1차 변환 모델, 애매한 것만 다시 보는 2차 모델. 이름 앞에 `openai.`가 붙는다(목록 API는 막혀 있음, 실측으로 확인: `openai.gpt-4o(-mini)`, `openai.gpt-4.1(-mini)`, `openai.gpt-5(-mini/-nano)`) |
@@ -394,6 +395,8 @@ PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_con
   이자 지원은 "2억원 한도 이자 지원"(대출 원금 한도라서), 바우처는 "20만원 상당".
 - 지원 내용이 바뀌면(`ai_support_hash`) 옛 결과는 안 쓰고 첫 줄로 돌아간 뒤 다시 뽑는다.
 - 실측(10/27): 신청 가능 온통청년 1,213건 모두 뽑음, 실패 0, 약 86만 토큰. 금액 332건, 한 줄 요약 1,211건. 무작위 40건·5천만원 이상 18건 수동 확인.
+- 기간(월·연·학기)이 없는 금액은 AI 요약의 단위를 앞에 붙인다: "아침밥 1식 1천원" → "1식 1,000원", "1인당" → "1인당 300만원" (`Support.perUnit`).
+- AI 요약이 제목을 반복할 뿐이면(띄어쓰기 무시하고 제목 안에 그대로 있으면, 실측 234건) `summary` 를 비운다 (`Support.repeatsTitle`).
 
 ### 자연어 검색
 

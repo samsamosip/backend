@@ -51,8 +51,14 @@ public record Support(String label, Long amountWon, String period, boolean upTo,
 			String kind = ai.path("kind").asString("OTHER");
 			String summary = ai.path("summary").isString() ? ai.path("summary").asString() : firstLine(p);
 			Integer months = "MONTH".equals(period) ? months(p.getSupportContent()) : null;
+			String unit = period == null || period.isBlank() ? perUnit(summary) : null;
 			String label = amount == null ? null
-					: label(amount, period, upTo, kind) + (months == null ? "" : " · 최대 " + months + "개월");
+					: (unit == null ? "" : unit + " ") + label(amount, period, upTo, kind)
+							+ (months == null ? "" : " · 최대 " + months + "개월");
+			// 제목을 다시 말할 뿐인 요약("청년 경제금융 토크콘서트" → "경제금융 토크콘서트")은 카드에 보여 줄 게 없다
+			if (repeatsTitle(summary, p.getTitle())) {
+				summary = null;
+			}
 			return new Support(label, amount, period, upTo, kind, summary, "AI", months);
 		}
 		return new Support(null, null, null, false, null, firstLine(p), "TEXT", null);
@@ -69,6 +75,34 @@ public record Support(String label, Long amountWon, String period, boolean upTo,
 		catch (NoSuchAlgorithmException ex) {
 			throw new IllegalStateException(ex);
 		}
+	}
+
+	private static final Pattern PER_UNIT = Pattern.compile("(1식당|1식|1끼|1인당|인당|1회당|회당|건당)");
+
+	/** 요약에 "1식 1천원", "1인당 지원"처럼 단위가 있으면 금액 앞에 붙일 말("1식", "1인당"). 없으면 null */
+	public static String perUnit(String summary) {
+		if (summary == null) {
+			return null;
+		}
+		Matcher m = PER_UNIT.matcher(summary);
+		if (!m.find()) {
+			return null;
+		}
+		return switch (m.group(1)) {
+			case "1식당", "1식", "1끼" -> "1식";
+			case "1인당", "인당" -> "1인당";
+			case "1회당", "회당" -> "1회";
+			default -> "건당";
+		};
+	}
+
+	/** 요약이 제목 안에 그대로 들어 있는지 (띄어쓰기 무시) */
+	public static boolean repeatsTitle(String summary, String title) {
+		if (summary == null || title == null) {
+			return false;
+		}
+		String s = summary.replaceAll("\\s+", "");
+		return !s.isEmpty() && title.replaceAll("\\s+", "").contains(s);
 	}
 
 	/** "대출 연 최대 200만원", "2억원 한도 이자 지원", "월 최대 30만원", "학기당 180만원", "20만원 상당" */

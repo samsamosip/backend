@@ -74,7 +74,7 @@ class AiSupportIntegrationTest {
 				{"amountWon": null, "period": "", "upTo": false, "kind": "SERVICE", "evidence": "", "summary": "교육 지원"}
 				"""));
 		given(llm.json(anyString(), anyString(), contains("월 최대 20만원"), anyString(), any())).willReturn(JSON.readTree("""
-				{"amountWon": 200000, "period": "MONTH", "upTo": true, "kind": "CASH", "evidence": "1인당 월 최대 20만원 지원", "summary": "아침밥 지원"}
+				{"amountWon": 200000, "period": "MONTH", "upTo": true, "kind": "CASH", "evidence": "1인당 월 최대 20만원 지원", "summary": "식비 현금 지원"}
 				"""));
 	}
 
@@ -96,7 +96,7 @@ class AiSupportIntegrationTest {
 		mockMvc.perform(get("/api/v1/policies/{id}", id))
 			.andExpect(jsonPath("$.support.label").value("월 최대 20만원"))
 			.andExpect(jsonPath("$.support.amountWon").value(200000))
-			.andExpect(jsonPath("$.support.summary").value("아침밥 지원"))
+			.andExpect(jsonPath("$.support.summary").value("식비 현금 지원"))
 			.andExpect(jsonPath("$.support.source").value("AI"));
 		// 목록 카드에도
 		mockMvc.perform(get("/api/v1/policies").param("size", "100"))
