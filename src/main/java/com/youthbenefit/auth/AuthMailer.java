@@ -61,6 +61,8 @@ public class AuthMailer {
 		this.sender = s;
 		this.address = mail.from() == null || mail.from().isBlank() ? mail.username() : mail.from().strip();
 		this.fromName = mail.fromName();
+		// 서버를 켤 때 메일 설정이 잡혔는지 로그로 바로 확인할 수 있게 (비밀번호는 남기지 않는다)
+		log.info("메일 설정: {}:{}, 보내는 주소 {}", mail.host(), mail.port(), address);
 	}
 
 	public AuthMailer(AuthProperties properties) {

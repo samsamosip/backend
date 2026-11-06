@@ -21,7 +21,7 @@ class AuthMailerTest {
 	void mailServerFailureIsFriendly503() {
 		// 메일 통로가 막힌 서버처럼: 아무도 안 받는 주소로 보내면 바로 실패
 		AuthMailer blocked = new AuthMailer(new AuthProperties(null, 30, 14, null,
-				new AuthProperties.Mail("127.0.0.1", 1, "sender@example.com", "x", "청년혜택 길잡이"), true), 10);
+				new AuthProperties.Mail("127.0.0.1", 1, "sender@example.com", "x", "청년혜택 길잡이", null), true), 10);
 		assertThat(blocked.configured()).isTrue();
 		assertThatThrownBy(() -> blocked.sendCode("someone@example.com", VerificationCode.Purpose.SIGNUP, "123456"))
 			.isInstanceOfSatisfying(ApiException.class, ex -> {
@@ -35,7 +35,7 @@ class AuthMailerTest {
 	void fromAddressIsMailFromOrUsername() {
 		// Gmail: 로그인 아이디가 곧 보내는 주소
 		assertThat(new AuthMailer(new AuthProperties(null, 30, 14, null,
-				new AuthProperties.Mail("smtp.gmail.com", 587, "sender@example.com", "x", "청년혜택 길잡이"), false), 10)
+				new AuthProperties.Mail("smtp.gmail.com", 587, "sender@example.com", "x", "청년혜택 길잡이", null), false), 10)
 			.fromAddress()).isEqualTo("sender@example.com");
 		// Postmark: 아이디·비밀번호는 Server API 토큰, 보내는 주소는 따로
 		assertThat(new AuthMailer(new AuthProperties(null, 30, 14, null, new AuthProperties.Mail("smtp.postmarkapp.com",
