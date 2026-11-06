@@ -141,6 +141,29 @@ class HarvesterSyncIntegrationTest {
 	}
 
 	@Test
+	void manualFixWithoutNewVersionIsFetchedAgain() {
+		syncService.sync();
+		// Harvester 관리자가 값을 고쳤다: 버전은 그대로(v2 → v2), 상세 응답만 바뀐다
+		given(apiClient.changes("1")).willReturn(page("2", Map.of("event_seq", 2, "event_kind", "updated",
+				"opportunity_id", OPEN_ID, "opportunity_version_id", "v2", "previous_version_id", "v2",
+				"visible_after", true)));
+		given(apiClient.changes("2")).willReturn(page("2"));
+		given(apiClient.detail(OPEN_ID)).willReturn(detail.replace("기초생활수급자 증명서", "가족관계증명서"));
+
+		HarvesterSyncResult result = syncService.sync();
+
+		assertThat(result.updated()).isEqualTo(1);
+		assertThat(policyRepository.findAll()).singleElement()
+			.satisfies(p -> assertThat(p.getSubmissionDocuments()).contains("가족관계증명서"));
+		// 같은 버전이라도 내용이 같으면 바꾸지 않는다
+		given(apiClient.changes("2")).willReturn(page("3", Map.of("event_seq", 3, "event_kind", "updated",
+				"opportunity_id", OPEN_ID, "opportunity_version_id", "v2", "previous_version_id", "v2",
+				"visible_after", true)));
+		given(apiClient.changes("3")).willReturn(page("3"));
+		assertThat(syncService.sync().unchanged()).isEqualTo(1);
+	}
+
+	@Test
 	void failedDetailKeepsCursorSoNextSyncRetries() {
 		syncService.sync();
 		String newId = "33333333-3333-4333-8333-333333333333";

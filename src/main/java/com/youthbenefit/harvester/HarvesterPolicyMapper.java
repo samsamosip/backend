@@ -38,8 +38,9 @@ public class HarvesterPolicyMapper {
 
 	private static final Set<String> APPLICATION_WINDOWS = Set.of("application", "additional_application");
 
+	/** Harvester 신청 방법(method) 전부: online·email·postal·visit·university_nomination·other */
 	private static final Map<String, String> METHOD_LABELS = Map.of("online", "온라인", "visit", "방문", "postal", "우편",
-			"email", "이메일");
+			"email", "이메일", "university_nomination", "학교 추천", "other", "기타");
 
 	private final JsonMapper jsonMapper;
 

@@ -56,7 +56,10 @@ public class HarvesterApiClient {
 		return factory;
 	}
 
-	/** 장학 공고 목록 전체 (요약). cursor 로 끝까지 넘긴다. */
+	/**
+	 * 장학 공고 목록 전체 (요약). cursor 로 끝까지 넘긴다. include_stale=true: 원문이 바뀌어 다시 정리 중인 공고도 받는다. 빼고 받으면
+	 * 전체 비교 때 "사라짐"으로 잘못 처리돼 담은 사람에게 '공고 내림' 알림이 간다(변경 목록으로 받을 때는 원래 그대로 보여 준다).
+	 */
 	public List<Map<String, Object>> listAll() {
 		checkConfigured();
 		List<Map<String, Object>> all = new ArrayList<>();
@@ -65,7 +68,7 @@ public class HarvesterApiClient {
 			String c = cursor;
 			String body = request("목록", () -> restClient.get()
 				.uri(uri -> {
-					uri.path("/v1/opportunities").queryParam("limit", PAGE_SIZE);
+					uri.path("/v1/opportunities").queryParam("limit", PAGE_SIZE).queryParam("include_stale", true);
 					if (c != null) {
 						uri.queryParam("cursor", c);
 					}

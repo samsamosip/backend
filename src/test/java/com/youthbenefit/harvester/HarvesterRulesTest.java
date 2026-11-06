@@ -131,6 +131,39 @@ class HarvesterRulesTest {
 	}
 
 	@Test
+	void parentOrHouseholdResidencyIsNotJudgedByMyAddress() {
+		for (String subject : java.util.List.of("parent", "household", "other")) {
+			Policy p = policy(detail.replace("\"self_or_parent\"", "\"" + subject + "\""));
+			// 보호자·가구가 인천에 살아야 하는 장학: 내가 서울에 살아도 불일치가 아니고, 인천에 살아도 일치가 아니다
+			assertThat(truthOf(judge(p, student("11620", "인하대", 3, "3.8", "4.5")), "거주지")).as(subject)
+				.isEqualTo(Truth.UNKNOWN);
+			assertThat(truthOf(judge(p, student("28185", "인하대", 3, "3.8", "4.5")), "거주지")).as(subject)
+				.isEqualTo(Truth.UNKNOWN);
+			assertThat(judge(p, student("11620", "인하대", 3, "3.8", "4.5")).verdict()).as(subject)
+				.isEqualTo(Verdict.NEEDS_CHECK);
+		}
+	}
+
+	@Test
+	void everyHarvesterApplicationMethodHasAKoreanLabel() {
+		String nomination = detail.replace("{\"method\": \"online\", \"url\": {\"state\": \"stated\"",
+				"{\"method\": \"university_nomination\", \"url\": {\"state\": \"stated\"");
+		assertThat(policy(nomination).getApplyMethod()).startsWith("학교 추천: ");
+		assertThat(policy(detail.replace("\"method\": \"online\"", "\"method\": \"other\"")).getApplyMethod())
+			.startsWith("기타: ");
+	}
+
+	@Test
+	void sameVersionEventIsAnInPlaceEdit() {
+		// Harvester 관리자가 값을 고치면 같은 버전으로 이벤트가 남는다 → 상세를 다시 받아야 한다
+		assertThat(HarvesterSyncService.isInPlaceEdit(Map.of("opportunity_version_id", "v2", "previous_version_id", "v2")))
+			.isTrue();
+		assertThat(HarvesterSyncService.isInPlaceEdit(Map.of("opportunity_version_id", "v3", "previous_version_id", "v2")))
+			.isFalse();
+		assertThat(HarvesterSyncService.isInPlaceEdit(Map.of("opportunity_version_id", "v1"))).isFalse();
+	}
+
+	@Test
 	void sigunguResidenceIsComparedButDongAndGenericSchoolsStayUnknown() {
 		String chuncheon = detail.replace("\"인천광역시\"", "\"춘천시\"").replace("\"self_or_parent\"", "\"self\"");
 		assertThat(judge(policy(chuncheon), student("51110", "인하대", 3, "3.8", "4.5")).conditions())

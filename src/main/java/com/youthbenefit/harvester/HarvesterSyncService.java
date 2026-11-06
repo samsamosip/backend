@@ -148,7 +148,8 @@ public class HarvesterSyncService {
 				continue;
 			}
 			String version = Objects.toString(event.get("opportunity_version_id"), null);
-			if (policy != null && Objects.equals(policy.getSourceVersion(), version) && !policy.isSourceRemoved()) {
+			if (policy != null && Objects.equals(policy.getSourceVersion(), version) && !policy.isSourceRemoved()
+					&& !isInPlaceEdit(event)) {
 				count.unchanged++;
 				processed = seq;
 				continue;
@@ -203,6 +204,16 @@ public class HarvesterSyncService {
 			count.unchanged++;
 		}
 		return true;
+	}
+
+	/**
+	 * 버전은 그대로 두고 내용만 고친 변경. Harvester 관리자가 값을 손으로 고치거나(manual override) 고친 것을 되돌리면 같은 버전으로
+	 * 이벤트가 남고 상세 응답에만 고친 값이 들어간다. 버전만 보고 건너뛰면 고친 값을 영영 못 받으니 상세를 다시 받는다(내용이 같으면
+	 * {@link Policy#apply} 가 그대로 둔다).
+	 */
+	static boolean isInPlaceEdit(Map<String, Object> event) {
+		Object version = event.get("opportunity_version_id");
+		return version != null && Objects.equals(Objects.toString(version), Objects.toString(event.get("previous_version_id"), null));
 	}
 
 	/** Harvester 가 알려 준 변경 종류. 모르는 종류면 바뀐 값으로 짐작한다. */
