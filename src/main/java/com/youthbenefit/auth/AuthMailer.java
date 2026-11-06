@@ -9,8 +9,9 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
 
 /**
- * 인증 코드 메일. MAIL_USERNAME 이 없으면(로컬 개발) 메일 대신 서버 로그에 코드를 남긴다.
+ * 인증 코드 메일. MAIL_USERNAME 이 없으면(로컬 개발) 메일 대신 서버 로그에 코드를 남긴다. SMTP 로그인(AUTH) 후 STARTTLS.
  * Gmail 이면 MAIL_USERNAME = 보내는 주소, MAIL_PASSWORD = 그 계정의 "앱 비밀번호".
+ * Postmark 면 MAIL_HOST=smtp.postmarkapp.com, MAIL_USERNAME = MAIL_PASSWORD = Server API 토큰, MAIL_FROM = Postmark 에서 인증한 보내는 주소.
  */
 @Slf4j
 @Component
@@ -58,7 +59,7 @@ public class AuthMailer {
 		props.put("mail.smtp.connectiontimeout", "10000");
 		props.put("mail.smtp.timeout", "10000");
 		this.sender = s;
-		this.address = mail.username();
+		this.address = mail.from() == null || mail.from().isBlank() ? mail.username() : mail.from().strip();
 		this.fromName = mail.fromName();
 	}
 
@@ -89,6 +90,11 @@ public class AuthMailer {
 			countDay = today;
 			sentToday = 0;
 		}
+	}
+
+	/** 보내는 주소 (MAIL_FROM, 없으면 MAIL_USERNAME). 메일 설정이 없으면 null */
+	String fromAddress() {
+		return address;
 	}
 
 	/** 메일 설정이 있는지 (없으면 로컬 개발) */

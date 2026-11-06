@@ -60,6 +60,7 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 | `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET` | (없음) | 카카오 디벨로퍼스 REST API 키, Client Secret. 없으면 카카오 로그인이 503 `KAKAO_NOT_CONFIGURED` |
 | `KAKAO_REDIRECT_URIS` | `http://localhost:5173/auth/kakao/callback` | 프론트 카카오 콜백 주소(콤마 구분). 카카오 콘솔 Redirect URI와 같아야 하고, 여기 없는 주소는 400 |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | (없음) | 메일 서버에 연결하지 못하면 503 `MAIL_FAILED`("인증 메일을 보내지 못했어요"), 못 보낸 코드는 지워서 1분 제한에 안 걸림. 인증 코드 메일(Gmail이면 보내는 주소와 앱 비밀번호, `MAIL_HOST`·`MAIL_PORT`로 바꿀 수 있음). **비우면 메일 대신 서버 로그에 코드를 찍는다(개발용)** |
+| `MAIL_FROM` | (없음 = `MAIL_USERNAME`) | 보내는 주소. Gmail은 비워 둔다. **Postmark**: `MAIL_HOST=smtp.postmarkapp.com`, `MAIL_PORT=587`(Render 무료처럼 587을 막는 곳은 `2525`), `MAIL_USERNAME`·`MAIL_PASSWORD` 둘 다 Server API 토큰, `MAIL_FROM`은 Postmark에서 인증한 보내는 주소(Sender Signature 또는 인증한 도메인) |
 | `KEEP_AWAKE_URL` | (없음) | **무료 서버(Render)에서만** 이 서버의 바깥 주소(`https://…onrender.com`). 10분마다 자기 `/actuator/health` 를 불러서 잠들지 않게 한다(Render 무료는 15분 동안 손님이 없으면 잠들고 깨는 데 1~2분). 정식 서버는 비워 둔다 |
 | `AUTH_DEV_SHOW_CODE` | `false` | **개발용 서버에서만** `true`: 메일 설정(`MAIL_USERNAME`)이 없을 때 인증 코드를 가입·코드 다시 받기·비밀번호 찾기 응답의 `devCode`로 내려 준다. 메일 설정이 있으면 무시. Render 무료 서버는 메일 통로(25·465·587)를 막아서 임시 서버에 켠다 |
 | `PWC_LLM_BASE_URL`, `PWC_LLM_API_KEY` | (없음) | PwC LLM 게이트웨이(OpenAI 방식). 글 조건 AI 변환에 쓴다. 주간 사용 한도가 있다. 없으면 변환 API가 503, 판정은 원래대로 |

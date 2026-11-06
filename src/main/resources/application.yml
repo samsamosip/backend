@@ -59,6 +59,8 @@ app:
       port: ${MAIL_PORT:587}
       username: ${MAIL_USERNAME:}
       password: ${MAIL_PASSWORD:}   # Gmail 은 앱 비밀번호
+      # 보내는 주소. 비우면 username 을 쓴다(Gmail). Postmark 처럼 username 이 토큰이면 인증한 보내는 주소를 넣는다
+      from: ${MAIL_FROM:}
       from-name: 청년혜택 길잡이
       # 하루(한국 시각) 보낼 메일 수. Gmail 은 하루 약 500통이 넘으면 계정을 막는다
       daily-limit: ${MAIL_DAILY_LIMIT:450}

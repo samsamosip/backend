@@ -16,8 +16,16 @@ public record AuthProperties(String jwtSecret, int accessTokenMinutes, int refre
 	public record Kakao(String clientId, String clientSecret, List<String> redirectUris) {
 	}
 
-	/** username 이 비어 있으면 메일 대신 서버 로그에 코드를 남긴다. */
-	public record Mail(String host, int port, String username, String password, String fromName) {
+	/**
+	 * username 이 비어 있으면 메일 대신 서버 로그에 코드를 남긴다. from 은 보내는 주소 — 비어 있으면 username 을 쓴다(Gmail 처럼
+	 * 로그인 아이디가 메일 주소일 때). Postmark 처럼 아이디가 토큰이면 from 에 인증된 보내는 주소를 넣는다.
+	 */
+	public record Mail(String host, int port, String username, String password, String fromName, String from) {
+
+		public Mail(String host, int port, String username, String password, String fromName) {
+			this(host, port, username, password, fromName, null);
+		}
+
 	}
 
 }

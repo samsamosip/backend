@@ -32,6 +32,18 @@ class AuthMailerTest {
 	}
 
 	@Test
+	void fromAddressIsMailFromOrUsername() {
+		// Gmail: 로그인 아이디가 곧 보내는 주소
+		assertThat(new AuthMailer(new AuthProperties(null, 30, 14, null,
+				new AuthProperties.Mail("smtp.gmail.com", 587, "sender@example.com", "x", "청년혜택 길잡이"), false), 10)
+			.fromAddress()).isEqualTo("sender@example.com");
+		// Postmark: 아이디·비밀번호는 Server API 토큰, 보내는 주소는 따로
+		assertThat(new AuthMailer(new AuthProperties(null, 30, 14, null, new AuthProperties.Mail("smtp.postmarkapp.com",
+				587, "token-1234", "token-1234", "청년혜택 길잡이", " no-reply@example.com "), false), 10).fromAddress())
+			.isEqualTo("no-reply@example.com");
+	}
+
+	@Test
 	void mailHasCodeAndGuidance() {
 		assertThat(AuthMailer.text(true, "482193")).contains("인증 코드: 482193", "10분", "회원가입을 마치려면", "보내기 전용");
 		assertThat(AuthMailer.text(false, "482193")).contains("비밀번호를 새로 설정하려면");
