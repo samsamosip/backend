@@ -16,7 +16,7 @@ import java.util.List;
  * schoolName 부터는 학교 장학 판정용이다. gpa 와 gpaScale 은 함께 보낸다.
  */
 public record ProfileRequest(
-		@Past LocalDate birthDate,
+		@Past(message = "오늘 이전 날짜여야 합니다") LocalDate birthDate,
 		@Pattern(regexp = "\\d{5}", message = "시군구 코드 5자리여야 합니다") String zipCd,
 		@Pattern(regexp = "\\d{5}", message = "시군구 코드 5자리여야 합니다") String actualZipCd,
 		String jobCd,
@@ -24,19 +24,19 @@ public record ProfileRequest(
 		String mrgSttsCd,
 		String plcyMajorCd,
 		List<String> sbizCd,
-		@Min(0) Integer annualIncome,
-		@Min(0) @Max(1000) Integer householdMedianIncomePct,
-		@Min(2000) @Max(2100) Integer householdIncomeYear,
+		@Min(value = 0, message = "0 이상이어야 합니다") Integer annualIncome,
+		@Min(value = 0, message = "0~1000 사이여야 합니다") @Max(value = 1000, message = "0~1000 사이여야 합니다") Integer householdMedianIncomePct,
+		@Min(value = 2000, message = "2000~2100 사이여야 합니다") @Max(value = 2100, message = "2000~2100 사이여야 합니다") Integer householdIncomeYear,
 		HousingType housingType,
 		Boolean homeowner,
 		List<String> interestCategories,
-		@Size(max = 100) String schoolName,
+		@Size(max = 100, message = "100자 이하여야 합니다") String schoolName,
 		EnrollmentStatus enrollmentStatus,
-		@Min(1) @Max(6) Integer gradeLevel,
-		@DecimalMin("0") BigDecimal gpa,
+		@Min(value = 1, message = "1~6 사이여야 합니다") @Max(value = 6, message = "1~6 사이여야 합니다") Integer gradeLevel,
+		@DecimalMin(value = "0", message = "0 이상이어야 합니다") BigDecimal gpa,
 		BigDecimal gpaScale,
-		@Min(0) @Max(10) Integer kosafIncomeBracket,
-		@Size(max = 100) String majorName) {
+		@Min(value = 0, message = "0~10 사이여야 합니다") @Max(value = 10, message = "0~10 사이여야 합니다") Integer kosafIncomeBracket,
+		@Size(max = 100, message = "100자 이하여야 합니다") String majorName) {
 
 	/** 전공 이름 없이 (예전 모양) */
 	public ProfileRequest(LocalDate birthDate, String zipCd, String actualZipCd, String jobCd, String schoolCd,

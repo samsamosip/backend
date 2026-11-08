@@ -33,11 +33,11 @@ public final class ApplicationRequests {
 	public record ChangeStatus(@NotNull(message = "status 가 필요합니다") ApplicationStatus status) {
 	}
 
-	public record AddItem(@NotBlank(message = "서류 이름을 입력해 주세요") @Size(max = 300) String content) {
+	public record AddItem(@NotBlank(message = "서류 이름을 입력해 주세요") @Size(max = 300, message = "300자 이하여야 합니다") String content) {
 	}
 
 	/** 바꿀 것만 보낸다. checked 만 보내면 체크, content 만 보내면 이름 수정. */
-	public record UpdateItem(Boolean checked, @Size(min = 1, max = 300) String content) {
+	public record UpdateItem(Boolean checked, @Size(min = 1, max = 300, message = "1~300자여야 합니다") String content) {
 	}
 
 }

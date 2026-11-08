@@ -8,6 +8,9 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -15,6 +18,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.exc.MismatchedInputException;
@@ -114,6 +119,41 @@ public class ApiExceptionHandler {
 	@ResponseStatus(HttpStatus.BAD_REQUEST)
 	public ErrorResponse typeMismatch(MethodArgumentTypeMismatchException ex) {
 		return new ErrorResponse("입력값을 확인해 주세요.", Map.of(ex.getName(), reason(ex.getRequiredType())));
+	}
+
+	/** 없는 주소 (예: /api/v1/nope). Spring 기본 영어 응답 대신 같은 모양으로 */
+	@ExceptionHandler(NoResourceFoundException.class)
+	@ResponseStatus(HttpStatus.NOT_FOUND)
+	public ErrorResponse noResource(NoResourceFoundException ex) {
+		return new ErrorResponse("없는 주소예요. API 문서(/docs)에서 주소를 확인해 주세요.", Map.of());
+	}
+
+	/** 주소는 맞는데 GET·POST 같은 방식이 틀림 */
+	@ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+	@ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
+	public ErrorResponse method(HttpRequestMethodNotSupportedException ex) {
+		return new ErrorResponse(ex.getMethod() + " 방식은 이 주소에서 쓸 수 없어요.", Map.of());
+	}
+
+	/** JSON 이나 파일을 받아야 하는데 다른 형식으로 보냄 */
+	@ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+	@ResponseStatus(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+	public ErrorResponse mediaType(HttpMediaTypeNotSupportedException ex) {
+		return new ErrorResponse("보내는 형식(Content-Type)을 확인해 주세요.", Map.of());
+	}
+
+	/** 꼭 필요한 검색 조건이 빠짐 (예: /search 의 q) */
+	@ExceptionHandler(MissingServletRequestParameterException.class)
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	public ErrorResponse missingParam(MissingServletRequestParameterException ex) {
+		return new ErrorResponse("입력값을 확인해 주세요.", Map.of(ex.getParameterName(), "값이 필요합니다"));
+	}
+
+	/** 캡처 올리기에서 파일이 빠짐 */
+	@ExceptionHandler(MissingServletRequestPartException.class)
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	public ErrorResponse missingPart(MissingServletRequestPartException ex) {
+		return new ErrorResponse("입력값을 확인해 주세요.", Map.of(ex.getRequestPartName(), "파일을 올려 주세요"));
 	}
 
 }
