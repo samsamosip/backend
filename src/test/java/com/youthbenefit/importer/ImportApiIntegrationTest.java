@@ -187,7 +187,7 @@ class ImportApiIntegrationTest {
 		when(client.fetch(UUID.fromString(b))).thenReturn(json.readTree("""
 				{"requestId": "%s", "status": "running"}""".formatted(b)));
 		job(me, b).andExpect(jsonPath("$.status").value("RUNNING"));
-		age(b, 200);
+		age(b, 601);
 		job(me, b).andExpect(jsonPath("$.status").value("FAILED")).andExpect(jsonPath("$.error.code").value("TIMEOUT"));
 	}
 
@@ -235,7 +235,9 @@ class ImportApiIntegrationTest {
 			.getResponse()
 			.getContentAsString(), "$.id");
 		// 파일 이름·형식이 아니라 내용으로 PNG 를 알아본다
-		verify(client).submitImage(eq(UUID.fromString(id)), eq(png), eq(MediaType.IMAGE_PNG),
+		verify(client).submitImages(eq(UUID.fromString(id)), org.mockito.ArgumentMatchers.argThat(
+				images -> images.size() == 1 && java.util.Arrays.equals(images.getFirst().bytes(), png)
+						&& images.getFirst().type().equals(MediaType.IMAGE_PNG)),
 				eq("https://api.example/api/v1/internal/import-jobs/" + id + "/result"));
 
 		callback(id, """
@@ -262,16 +264,56 @@ class ImportApiIntegrationTest {
 		mockMvc.perform(multipart("/api/v1/me/imports/image")
 			.file(new MockMultipartFile("image", "a.png", "image/png", big))
 			.header("X-Anonymous-Id", me)).andExpect(status().is4xxClientError());
-		verify(client, never()).submitImage(any(), any(), any(), any());
+		verify(client, never()).submitImages(any(), any(), any());
 
 		// 불러오기 서버가 사진을 거절하면(400) 서버 장애가 아니라 사진 문제로 알려 준다
-		doThrow(new ImporterException("거절", null, true)).when(client).submitImage(any(), any(), any(), any());
+		doThrow(new ImporterException("거절", null, true)).when(client).submitImages(any(), any(), any());
 		mockMvc.perform(multipart("/api/v1/me/imports/image")
 			.file(new MockMultipartFile("image", "a.png", "image/png", png()))
 			.header("X-Anonymous-Id", me))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.errors.image").exists());
 		assertThat(jdbc.queryForObject("select count(*) from import_jobs", Integer.class)).isZero();
+	}
+
+	@Test
+	void capturesAreOneJobAndInvalidLaterCaptureRejectsTheWholeBatch() throws Exception {
+		mockMvc.perform(multipart("/api/v1/me/imports/image")
+			.file(new MockMultipartFile("image", "first.png", "image/png", png()))
+			.file(new MockMultipartFile("image", "second.png", "image/png", png()))
+			.header("X-Anonymous-Id", me)).andExpect(status().isAccepted());
+		assertThat(jdbc.queryForObject("select count(*) from import_jobs", Integer.class)).isEqualTo(1);
+		verify(client).submitImages(any(), org.mockito.ArgumentMatchers.argThat(images -> images.size() == 2), any());
+
+		mockMvc.perform(multipart("/api/v1/me/imports/image")
+			.file(new MockMultipartFile("image", "first.png", "image/png", png()))
+			.file(new MockMultipartFile("image", "bad.png", "image/png", new byte[] { 1, 2 }))
+			.header("X-Anonymous-Id", me)).andExpect(status().isBadRequest());
+		var tooMany = multipart("/api/v1/me/imports/image").header("X-Anonymous-Id", me);
+		for (int i = 0; i < 6; i++) {
+			tooMany.file(new MockMultipartFile("image", "capture.png", "image/png", png()));
+		}
+		mockMvc.perform(tooMany).andExpect(status().isBadRequest());
+		assertThat(jdbc.queryForObject("select count(*) from import_jobs", Integer.class)).isEqualTo(1);
+	}
+
+	@Test
+	void fiveCapturesAreAllowedButTotalBytesAreLimited() throws Exception {
+		var five = multipart("/api/v1/me/imports/image").header("X-Anonymous-Id", me);
+		for (int i = 0; i < 5; i++) {
+			five.file(new MockMultipartFile("image", "capture.png", "image/png", png()));
+		}
+		mockMvc.perform(five).andExpect(status().isAccepted());
+		verify(client).submitImages(any(), org.mockito.ArgumentMatchers.argThat(images -> images.size() == 5), any());
+		byte[] large = new byte[8 * 1024 * 1024];
+		System.arraycopy(png(), 0, large, 0, 8);
+		var oversized = multipart("/api/v1/me/imports/image").header("X-Anonymous-Id", me);
+		for (int i = 0; i < 4; i++) {
+			oversized.file(new MockMultipartFile("image", "large.png", "image/png", large));
+		}
+		mockMvc.perform(oversized).andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.errors.image").exists());
+		assertThat(jdbc.queryForObject("select count(*) from import_jobs", Integer.class)).isEqualTo(1);
 	}
 
 	@Test

@@ -13,9 +13,9 @@ spring:
     password: ${DB_PASSWORD:youthbenefit}
   servlet:
     multipart:
-      # 캡처 불러오기 사진 (불러오기 서버가 10MB 까지 받는다)
+      # 공고 캡처 최대 5장, 장당 10MiB·합계 30MiB + multipart 헤더 여유
       max-file-size: 10MB
-      max-request-size: 11MB
+      max-request-size: 31MB
   jpa:
     open-in-view: false
     hibernate:

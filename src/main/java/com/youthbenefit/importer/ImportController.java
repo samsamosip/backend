@@ -2,6 +2,7 @@ package com.youthbenefit.importer;
 
 import com.youthbenefit.auth.CurrentOwner;
 import com.youthbenefit.common.ApiException;
+import com.youthbenefit.common.InvalidRequestException;
 import com.youthbenefit.common.RateLimiter;
 import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,6 +11,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -55,23 +59,36 @@ public class ImportController {
 	}
 
 	@Operation(summary = "캡처 불러오기 시작",
-			description = "multipart/form-data 의 image 칸에 공고 화면 사진(PNG·JPG·WEBP, 10MB 이하)을 올린다. 그다음은 링크 불러오기와 같다 "
+			description = "multipart/form-data 의 image 칸에 공고 화면 사진을 순서대로 반복해 올린다(PNG·JPG·WEBP, 최대 5장, 장당 10MB·합계 30MB 이하). 그다음은 링크 불러오기와 같다 "
 					+ "(202 → GET /api/v1/me/imports/{id} 를 2초마다). 캡처는 prefill.applyUrl 이 비어 있다. "
 					+ "사진이 아니거나 크면 400(errors.image), 1시간 20번은 링크와 합쳐서 센다")
 	@PostMapping(value = "/api/v1/me/imports/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public ResponseEntity<ImportJobService.ImportView> startImage(@CurrentOwner UUID owner,
-			@RequestPart(name = "image", required = false) MultipartFile image) throws IOException {
+			@RequestPart(name = "image", required = false) List<MultipartFile> images) throws IOException {
 		if (!perOwner.tryAcquire(owner.toString())) {
 			throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", "불러오기가 너무 잦아요. 잠시 후 다시 해 주세요.");
 		}
-		return ResponseEntity.status(HttpStatus.ACCEPTED)
-			.body(service.startImage(owner, image == null ? null : image.getBytes()));
+		if (images != null && images.size() > ImportJobService.IMAGE_MAX_COUNT) {
+			throw new InvalidRequestException(Map.of("image", "캡처는 최대 5장까지 올릴 수 있어요"));
+		}
+		List<byte[]> contents = new ArrayList<>();
+		long total = 0;
+		if (images != null) {
+			for (MultipartFile image : images) {
+				total += image.getSize();
+				if (image.getSize() > ImportJobService.IMAGE_MAX_BYTES || total > ImportJobService.IMAGES_MAX_BYTES) {
+					throw new InvalidRequestException(Map.of("image", "캡처는 장당 10MB, 합계 30MB 이하로 올려 주세요"));
+				}
+				contents.add(image.getBytes());
+			}
+		}
+		return ResponseEntity.status(HttpStatus.ACCEPTED).body(service.startImages(owner, contents));
 	}
 
 	@Operation(summary = "불러오기 상태",
 			description = "status: QUEUED·RUNNING(기다리는 중) → SUCCEEDED(prefill: title·organization·applyEndDate·applyEndTime·"
 					+ "category·memo·applyUrl — 공고 직접 등록 입력칸 그대로, 못 찾은 칸은 null) 또는 FAILED(error.code·message). "
-					+ "3분 넘게 안 끝나면 FAILED TIMEOUT")
+					+ "10분 넘게 안 끝나면 FAILED TIMEOUT")
 	@GetMapping("/api/v1/me/imports/{id}")
 	public ImportJobService.ImportView get(@CurrentOwner UUID owner, @PathVariable UUID id) {
 		return service.get(owner, id);

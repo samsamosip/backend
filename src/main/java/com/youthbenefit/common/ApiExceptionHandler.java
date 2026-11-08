@@ -100,7 +100,7 @@ public class ApiExceptionHandler {
 	@ExceptionHandler(MaxUploadSizeExceededException.class)
 	@ResponseStatus(HttpStatus.CONTENT_TOO_LARGE)
 	public ErrorResponse tooLarge(MaxUploadSizeExceededException ex) {
-		return new ErrorResponse("파일이 너무 커요. 10MB 이하로 올려 주세요.", Map.of());
+		return new ErrorResponse("캡처는 장당 10MB, 합계 30MB 이하로 올려 주세요.", Map.of());
 	}
 
 	@ExceptionHandler(MissingRequestHeaderException.class)

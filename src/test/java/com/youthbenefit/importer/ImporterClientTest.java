@@ -67,7 +67,7 @@ class ImporterClientTest {
 	void captureIsSentAsMultipartWithImageFile() {
 		UUID id = UUID.randomUUID();
 		byte[] png = { (byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
-		client.submitImage(id, png, MediaType.IMAGE_PNG, "https://api.example/api/v1/internal/import-jobs/" + id + "/result");
+		client.submitImages(id, List.of(new ImporterClient.Capture(png, MediaType.IMAGE_PNG)), "https://api.example/api/v1/internal/import-jobs/" + id + "/result");
 
 		String[] r = received.get(0);
 		assertThat(r[1]).isEqualTo("backend-key");
@@ -75,14 +75,27 @@ class ImporterClientTest {
 		assertThat(r[3]).contains("name=\"requestId\"", id.toString())
 			.contains("name=\"type\"", "image")
 			.contains("name=\"callbackUrl\"", "/api/v1/internal/import-jobs/" + id + "/result")
-			.contains("name=\"image\"; filename=\"capture.png\"", "Content-Type: image/png")
+			.contains("name=\"image\"; filename=\"capture-1.png\"", "Content-Type: image/png")
 			.contains(new String(png, StandardCharsets.ISO_8859_1));
+	}
+
+	@Test
+	void multipleCapturesUseRepeatedFieldsAndPreserveOrderAndTypes() {
+		byte[] png = "first-capture".getBytes(StandardCharsets.UTF_8);
+		byte[] jpeg = "second-capture".getBytes(StandardCharsets.UTF_8);
+		client.submitImages(UUID.randomUUID(), List.of(new ImporterClient.Capture(png, MediaType.IMAGE_PNG),
+				new ImporterClient.Capture(jpeg, MediaType.IMAGE_JPEG)), null);
+		assertThat(received).hasSize(1);
+		String body = received.get(0)[3];
+		assertThat(body).contains("filename=\"capture-1.png\"", "filename=\"capture-2.jpeg\"",
+				"Content-Type: image/png", "Content-Type: image/jpeg");
+		assertThat(body.indexOf("first-capture")).isLessThan(body.indexOf("second-capture"));
 	}
 
 	@Test
 	void rejectedInputIsNotRetried() {
 		status = 400;
-		assertThatThrownBy(() -> client.submitImage(UUID.randomUUID(), new byte[] { 1 }, MediaType.IMAGE_PNG, null))
+		assertThatThrownBy(() -> client.submitImages(UUID.randomUUID(), List.of(new ImporterClient.Capture(new byte[] { 1 }, MediaType.IMAGE_PNG)), null))
 			.isInstanceOfSatisfying(ImporterException.class, ex -> assertThat(ex.isRejected()).isTrue());
 		assertThat(received).hasSize(1);
 		status = 401;

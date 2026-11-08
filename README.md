@@ -134,7 +134,7 @@ docker compose up -d --no-build
 | `POST /api/v1/me/custom-policies` | 공고 직접 등록(WF07 1차) `{title, organization, applyEndDate, applyEndTime: "18:00", category, memo, applyUrl, documents: ["재학증명서"], status}` — 공고명만 필수. 나만 보이는 공고가 생기고 준비함에 바로 담김(응답은 준비함 상세, `source: "USER"`). 판정 없음, D-day·마감 임박 알림·체크리스트는 됨 |
 | `PUT`·`DELETE /api/v1/me/custom-policies/{policyId}` | 직접 등록 공고 수정(보낸 값 전체로, 남은 서류의 체크는 유지)·삭제. 준비함에서 빼도 공고째 지워진다 |
 | `POST /api/v1/me/imports` | 링크 불러오기 시작(WF07 2차) `{url}` → 202 `{id, status: "QUEUED"}`. 불러오기 서버가 없거나 꺼져 있으면 503 `IMPORT_UNAVAILABLE`, 1시간 20번 넘으면 429 |
-| `POST /api/v1/me/imports/image` | 캡처 불러오기 시작. `multipart/form-data`의 `image`에 PNG·JPG·WEBP 10MB 이하 → 202. 사진이 아니거나 크면 400 `errors.image`(10MB 넘는 업로드는 413). 이후는 링크와 같고 `prefill.applyUrl`은 비어 있음 |
+| `POST /api/v1/me/imports/image` | 캡처 불러오기 시작. `multipart/form-data`의 `image`를 순서대로 반복해 PNG·JPG·WEBP 최대 5장(장당 10MB·합계 30MB) → 한 작업으로 202. 사진이 아니거나 크면 400 `errors.image`(10MB 넘는 업로드는 413). 이후는 링크와 같고 `prefill.applyUrl`은 비어 있음 |
 | `GET /api/v1/me/imports/{id}` | 불러오기 상태(링크·캡처 공통, `type: URL|IMAGE`). 2초마다 부른다. `QUEUED`·`RUNNING` → `SUCCEEDED`(`prefill`: 공고 직접 등록 입력칸 그대로, 못 찾은 칸은 null → 사용자가 확인 후 `POST /me/custom-policies`) 또는 `FAILED`(`error.code`·`message`, 화면에 그대로) |
 | `GET /api/v1/search?q=서울 사는 대학생 월세&includeNoMatch=&page=&size=` | 자연어 검색(WF06). 지금 신청 가능한 공고를 찾아 내 프로필로 판정. `understood`는 알아들은 조건(화면 칩): `keywords`(찾는 것 단어 묶음), `audience`(누구), `categories`, `region`, `age`, `closingSoon`, `ai`(false면 AI 없이 단어로 찾음). 기본은 불일치 제외. 결과가 없으면 `message`(WF06-b: "부산에서는 못 찾았어요. 지역을 빼면 n개 있어요") |
 | `GET /api/v1/policies/{id}/eligibility` | 공고 하나의 조건별 판정(WF03): 공고 요구사항, 내 값, 참/거짓/미확인, 근거, 채우면 다시 판정되는 항목. `summary`는 카드용 짧은 이유(최종 디자인 "기관 · 소득 정보 확인 필요"의 "·" 뒤: "나이·지역 조건 일치", "지역 조건 불일치", "소득 정보 확인 필요", "예술인 확인 필요"), `explanation`은 상세용 한 문장("소득을 입력하면 바로 확인돼요", "예술인은 공고 원문에서 확인해 주세요") |
@@ -485,15 +485,16 @@ PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_con
 2. 불러오기 서버가 `POST /api/v1/internal/import-jobs/{id}/result`로 결과를 보낸다(문서에서 숨김). `X-Timestamp`(유닉스 초, 5분 넘게 차이 나면 401)와
    `X-Signature` = HMAC-SHA256(공유 키, `"{X-Timestamp}.{본문 그대로}"`) 16진수를 확인한다. 이미 끝난 작업이면 처음 것만 쓰고 200.
 3. 프론트는 `GET /me/imports/{id}`를 2초마다 부른다. 콜백이 30초 안에 안 오거나 콜백을 못 받는 곳(로컬)이면 백엔드가 `GET /v1/import-jobs/{id}`로
-   직접 묻는다(3초에 한 번까지). 3분 넘게 안 끝나면 `TIMEOUT`, 불러오기 서버에서 작업이 사라졌으면(404) `INTERNAL`.
+   직접 묻는다(3초에 한 번까지). 10분 넘게 안 끝나면 `TIMEOUT`, 불러오기 서버에서 작업이 사라졌으면(404) `INTERNAL`.
 - 결과 칸은 규칙에 안 맞으면 null(날짜 `YYYY-MM-DD`·시각 `HH:mm`이 아니거나 없는 날짜, 목록 밖 분류, 마감일 없는 시각). 입력칸보다 길면 자른다(공고명·기관 100자, 메모 2,000자).
   원문 링크가 없거나 이상하면 사용자가 준 링크.
 - 실패 코드는 `FETCH_FAILED NOT_A_NOTICE UNREADABLE_IMAGE TIMEOUT INTERNAL`만, 모르는 코드는 `INTERNAL`. 메시지가 비었거나 200자가 넘으면 백엔드 기본 문구.
 - `localhost`·내부망 IP(10.x, 192.168.x, 169.254.x 등)·`.local` 주소는 400 — 불러오기 서버가 대신 내부 주소를 열지 않게. 도메인 이름이 내부 IP로 풀리는 경우는 불러오기 서버 쪽에서 막아야 한다.
 - 지난 작업은 일주일 뒤 지운다. 로그인하면 계정으로 옮기고, 내 데이터 삭제·탈퇴 때 지운다. V18.
 - 캡처: 프론트가 사진을 올리면 파일 앞부분으로 PNG·JPG·WEBP 를 확인(이름·형식은 안 믿음)하고, 불러오기 서버에 multipart(`requestId`, `type=image`,
-  `callbackUrl`, `image`)로 그대로 넘긴다. 사진은 저장하지 않는다. 불러오기 서버가 사진을 거절하면(400·413) 503 이 아니라 400 `errors.image`.
-  사용량 제한은 링크와 합쳐서 센다.
+  `callbackUrl`, 순서대로 반복한 `image`)로 그대로 넘긴다. 최대 5장, 장당 10MB·합계 30MB. 백엔드에는 사진을 저장하지 않는다. 불러오기 서버가 사진을 거절하면(400·413) 503 이 아니라 400 `errors.image`.
+  한 묶음을 불러오기 1회로 세며 사용량 제한은 링크와 합쳐서 센다. Harvester는 전사 후 한 번에 구조화하고 처리 제한은 5분이다.
+- 배포: Harvester의 `0011_import_job_images` migration과 API·import-worker를 먼저 함께 갱신한 뒤 backend → frontend 순서로 반영한다. 앞단 프록시 업로드 한도는 최소 31MiB.
 
 ### 사용 통계
 

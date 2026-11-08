@@ -15,6 +15,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -46,8 +48,8 @@ public class ImportJobService {
 	/** 직접 물어보는 최소 간격 (프론트가 2초마다 물어봐도 불러오기 서버엔 이 간격으로만) */
 	static final Duration POLL_INTERVAL = Duration.ofSeconds(3);
 
-	/** 불러오기 서버는 60초 안에 끝내고 콜백을 3번까지 다시 보낸다. 이보다 오래 걸리면 실패로 본다 */
-	static final Duration GIVE_UP_AFTER = Duration.ofMinutes(3);
+	/** 불러오기 서버는 5분 안에 끝내고 콜백을 3번까지 다시 보낸다. 이보다 오래 걸리면 실패로 본다 */
+	static final Duration GIVE_UP_AFTER = Duration.ofMinutes(10);
 
 	/** 콜백 서명 시각이 이보다 차이 나면 거절 (다시 보내기 공격 막기) */
 	static final Duration SIGNATURE_WINDOW = Duration.ofMinutes(5);
@@ -69,6 +71,10 @@ public class ImportJobService {
 
 	/** 불러오기 서버가 받는 사진 크기 (10MiB) */
 	static final int IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+	static final int IMAGE_MAX_COUNT = 5;
+
+	static final int IMAGES_MAX_BYTES = 30 * 1024 * 1024;
 
 	private final ImportJobRepository repository;
 
@@ -118,20 +124,32 @@ public class ImportJobService {
 				Map.of("url", "이 링크는 불러올 수 없어요. 직접 입력해 주세요"));
 	}
 
-	/** 캡처 불러오기 시작. PNG·JPG·WEBP 10MB 이하만 (파일 내용으로 확인). */
-	public ImportView startImage(UUID owner, byte[] image) {
-		if (image == null || image.length == 0) {
+	/** 같은 공고의 캡처를 순서대로 묶어서 한 작업으로 보낸다. 모든 파일을 검증한 뒤에만 작업을 만든다. */
+	public ImportView startImages(UUID owner, List<byte[]> images) {
+		if (images == null || images.isEmpty()) {
 			throw new InvalidRequestException(Map.of("image", "사진을 올려 주세요"));
 		}
-		if (image.length > IMAGE_MAX_BYTES) {
-			throw new InvalidRequestException(Map.of("image", "10MB 이하 사진만 올릴 수 있어요"));
+		if (images.size() > IMAGE_MAX_COUNT) {
+			throw new InvalidRequestException(Map.of("image", "캡처는 최대 5장까지 올릴 수 있어요"));
 		}
-		MediaType type = imageType(image);
-		if (type == null) {
-			throw new InvalidRequestException(Map.of("image", "PNG·JPG·WEBP 사진만 올릴 수 있어요"));
+		List<ImporterClient.Capture> captures = new ArrayList<>();
+		long total = 0;
+		for (byte[] image : images) {
+			if (image == null || image.length == 0) {
+				throw new InvalidRequestException(Map.of("image", "내용이 비어 있는 사진이 있어요"));
+			}
+			total += image.length;
+			if (image.length > IMAGE_MAX_BYTES || total > IMAGES_MAX_BYTES) {
+				throw new InvalidRequestException(Map.of("image", "캡처는 장당 10MB, 합계 30MB 이하로 올려 주세요"));
+			}
+			MediaType type = imageType(image);
+			if (type == null) {
+				throw new InvalidRequestException(Map.of("image", "PNG·JPG·WEBP 사진만 올릴 수 있어요"));
+			}
+			captures.add(new ImporterClient.Capture(image, type));
 		}
 		return submit(ImportJob.image(owner, clock.instant()),
-				job -> client.submitImage(job.getId(), image, type, callbackUrl(job.getId())),
+				job -> client.submitImages(job.getId(), captures, callbackUrl(job.getId())),
 				Map.of("image", "이 사진은 읽을 수 없어요. 다른 사진을 올리거나 직접 입력해 주세요"));
 	}
 

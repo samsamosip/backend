@@ -71,8 +71,11 @@ public class ImporterClient {
 			.body(String.class));
 	}
 
-	/** 캡처 불러오기 작업 만들기. multipart 로 requestId·type=image·callbackUrl(있으면)·image 파일을 보낸다. */
-	public void submitImage(UUID requestId, byte[] image, MediaType type, String callbackUrl) {
+	public record Capture(byte[] bytes, MediaType type) {
+	}
+
+	/** 같은 image 필드를 반복하여 캡처 순서를 보존한다. 한 장도 같은 계약을 사용한다. */
+	public void submitImages(UUID requestId, List<Capture> images, String callbackUrl) {
 		checkConfigured();
 		MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
 		body.add("requestId", requestId.toString());
@@ -80,10 +83,13 @@ public class ImporterClient {
 		if (callbackUrl != null) {
 			body.add("callbackUrl", callbackUrl);
 		}
-		HttpHeaders imageHeaders = new HttpHeaders();
-		imageHeaders.setContentType(type);
-		imageHeaders.setContentDispositionFormData("image", "capture." + type.getSubtype());
-		body.add("image", new HttpEntity<>(new ByteArrayResource(image), imageHeaders));
+		for (int i = 0; i < images.size(); i++) {
+			Capture image = images.get(i);
+			HttpHeaders imageHeaders = new HttpHeaders();
+			imageHeaders.setContentType(image.type());
+			imageHeaders.setContentDispositionFormData("image", "capture-" + (i + 1) + "." + image.type().getSubtype());
+			body.add("image", new HttpEntity<>(new ByteArrayResource(image.bytes()), imageHeaders));
+		}
 		request("캡처 작업 만들기", () -> restClient.post()
 			.uri("/v1/import-jobs")
 			.contentType(MediaType.MULTIPART_FORM_DATA)
