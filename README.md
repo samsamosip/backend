@@ -64,7 +64,8 @@ curl -X POST localhost:8080/api/v1/admin/harvester/sync
 | `KEEP_AWAKE_URL` | (없음) | **무료 서버(Render)에서만** 이 서버의 바깥 주소(`https://…onrender.com`). 10분마다 자기 `/actuator/health` 를 불러서 잠들지 않게 한다(Render 무료는 15분 동안 손님이 없으면 잠들고 깨는 데 1~2분). 정식 서버는 비워 둔다 |
 | `AUTH_DEV_SHOW_CODE` | `false` | **개발용 서버에서만** `true`: 메일 설정(`MAIL_USERNAME`)이 없을 때 인증 코드를 가입·코드 다시 받기·비밀번호 찾기 응답의 `devCode`로 내려 준다. 메일 설정이 있으면 무시. Render 무료 서버는 메일 통로(25·465·587)를 막아서 임시 서버에 켠다 |
 | `PWC_LLM_BASE_URL`, `PWC_LLM_API_KEY` | (없음) | PwC LLM 게이트웨이(OpenAI 방식). 글 조건 AI 변환에 쓴다. 주간 사용 한도가 있다. 없으면 변환 API가 503, 판정은 원래대로 |
-| `PWC_LLM_MODEL`, `PWC_LLM_REVIEW_MODEL` | `openai.gpt-4.1-mini`, `openai.gpt-4.1` | 1차 변환 모델, 애매한 것만 다시 보는 2차 모델. 이름 앞에 `openai.`가 붙는다(목록 API는 막혀 있음, 실측으로 확인: `openai.gpt-4o(-mini)`, `openai.gpt-4.1(-mini)`, `openai.gpt-5(-mini/-nano)`) |
+| `PWC_LLM_MODEL`, `PWC_LLM_REVIEW_MODEL` | `openai.gpt-6-luna`, `openai.gpt-6.1-sol` | 검색·1차 변환 모델, 애매한 자격 조건만 다시 보는 2차 모델. 둘 다 환경변수로 변경. 모델 목록은 게이트웨이의 `GET /models`에서 Bearer 인증으로 조회(`/v1/models`는 403) |
+| `PWC_LLM_TEMPERATURE`, `PWC_LLM_REASONING_EFFORT` | `1`, `none` | 요청 옵션. GPT-6 계열은 이 게이트웨이에서 temperature=1만 허용한다. none으로 검색·짧은 추출의 추론 대기시간을 줄이며, 추론량을 빈 문자열로 두면 요청에서 생략한다 |
 | `PWC_LLM_DAILY_TOKEN_LIMIT` | `3000000` | 하루(한국 시간) AI 토큰 한도. 넘으면 다음 날까지 AI를 안 부른다(검색은 단어로, 변환은 다음 수집 때). 주간 $50 보호용. 0이면 제한 없음 |
 | `IMPORTER_BASE_URL`, `IMPORTER_API_KEY` | (없음) | 공고 불러오기 서버 주소와 백엔드용 키. policy-harvester 안에 있어서 Harvester 주소, 키는 Harvester 관리자 화면에서 백엔드 전용으로 발급. 없으면 `POST /api/v1/me/imports`가 503 `IMPORT_UNAVAILABLE`(화면은 직접 입력으로) |
 | `IMPORTER_CALLBACK_SECRET`, `IMPORTER_CALLBACK_BASE_URL` | (없음) | 결과 콜백 서명 공유 비밀키(불러오기 서버와 같은 값), 불러오기 서버가 부를 이 백엔드 바깥 주소(`https://…`). 둘 중 하나라도 비면(로컬) 콜백 없이 직접 조회만 |
@@ -362,10 +363,10 @@ unknown)를 준다. restricted이고 값이 확실할 때만 비교하고, 정�
 ### 글 조건 AI 변환
 
 온통청년 글 조건(소득 기타 `earnEtcCn`, 추가 자격 `addAplyQlfcCndCn`, 참여 제한 `ptcpPrpTrgtCn`)은 원래 "원문 확인 필요"였다.
-PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_conditions`에 저장하고, 판정 때 원래 Unparsed 대신 쓴다(`eligibility/AiConditionConverter`).
+PwC LLM(기본 `openai.gpt-6-luna`)으로 판정 규칙으로 바꿔 `policies.ai_conditions`에 저장하고, 판정 때 원래 Unparsed 대신 쓴다(`eligibility/AiConditionConverter`).
 
 - **원칙: 틀린 "불일치"보다 "확인 필요"가 낫다.** 규칙은 "만족 못 하면 신청할 수 없는" 필수 조건만. AI 답은 그대로 믿지 않고 코드로 다시 검사해서 하나라도
-  안 맞으면 그 조건은 확인 필요로 남긴다. 확신이 낮거나 검사에서 떨어진 게 있으면 `openai.gpt-4.1`이 한 번 더 본다.
+  안 맞으면 그 조건은 확인 필요로 남긴다. 확신이 낮거나 검사에서 떨어진 게 있으면 `PWC_LLM_REVIEW_MODEL`(기본 `openai.gpt-6.1-sol`)이 한 번 더 본다.
 - 규칙 변수: 나이, 거주 지역(이름 → 시도·시군구 코드), 본인 연소득, 가구 기준중위소득 %, 무주택, 주거 형태, 학력, 결혼 여부. 취업 상태는 말과 코드가 잘 안 맞아서 뺐다.
 - 검사(실데이터에서 나온 실수를 막는 것들, `AiConditionConverterTest`):
   근거 구절이 원문에 그대로 있어야 함 / "연 매출"·"중위소득 %"를 연소득으로 읽지 않기 / "4~12세 아동", "생후 24개월"은 신청자 나이가 아님 /
@@ -390,7 +391,7 @@ PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_con
 화면은 `label`이 있으면 금액, 없으면 `summary`를 보여 주면 된다.
 
 - 학교 장학: Harvester가 정리한 금액(`benefits.amount_max`, 지급 주기) — "학기당 350만원", "등록금 전액", 학자금 대출은 "대출 연 최대 200만원"
-- 온통청년: 지원 내용 글에서 AI(`openai.gpt-4.1-mini`)가 1인당 받는 금액·주기·한 줄 요약을 뽑고 코드가 검사(`support/AiSupportExtractor`):
+- 온통청년: 지원 내용 글에서 AI(기본 `openai.gpt-6-luna`)가 1인당 받는 금액·주기·한 줄 요약을 뽑고 코드가 검사(`support/AiSupportExtractor`):
   금액이 근거 구절에 실제로 적혀 있어야 하고(한국어 금액 읽기 `Support.amounts`: "5백만원", "1.8백만원", "40,000천원", "1.5억원"), 근거는 원문에 있어야 하고,
   사업 예산·기업 지원액·보험 보장 한도는 버린다. 근거에 금액이 하나뿐인데 AI 숫자가 다르면 원문 숫자를 쓴다("연60백만원"을 600만원으로 읽은 경우).
   이자 지원은 "2억원 한도 이자 지원"(대출 원금 한도라서), 바우처는 "20만원 상당".
@@ -401,8 +402,9 @@ PwC LLM(`openai.gpt-4.1-mini`)으로 판정 규칙으로 바꿔 `policies.ai_con
 
 ### 자연어 검색
 
-- AI(`openai.gpt-4.1-mini`)는 문장을 알아듣는 데만 쓰고, 공고는 코드가 찾는다(`search/`). 같은 문장은 해석을 기억(최근 500개)해서 두 번째부터 0.1초.
-  AI가 안 되면(키 없음·한도·오류) 띄어쓰기로 나눈 단어로 찾는다 — 검색이 멈추지 않게. 실측 1.2~2.5초(첫 요청 ~6초).
+- AI(기본 `openai.gpt-6-luna`)는 문장을 알아듣는 데만 쓰고, 공고는 코드가 찾는다(`search/`). 같은 문장은 해석을 기억(최근 500개)해서 두 번째부터 0.1초.
+  AI가 안 되면(키 없음·한도·오류) 띄어쓰기로 나눈 단어로 찾는다 — 검색이 멈추지 않게. 2026-11-10 게이트웨이 직접 호출(검색 예시 3개, temperature=1·reasoning_effort=none)에서
+  GPT-6 Luna 2.82~3.09초(중앙값 2.99초), GPT-6.1 Sol 2.30~2.73초(중앙값 2.45초). DB 검색·판정 시간은 제외한 값이며 요청 내용·서버 상태에 따라 달라진다.
 - 해석: **찾는 것**(월세, 학원비, 창업)과 **누구**(대학생, 신혼부부)를 나눈다. 찾는 것 단어 묶음 하나는 공고에 나와야 하고, 누구는 점수만 더한다
   (자격은 프로필 판정이 본다). 찾는 것 없이 상황만 말하면("결혼했는데 받을 수 있는 거") 누구로 찾는다. "지원", "청년" 같은 흔한 말은 뺀다.
 - 점수: 제목 3, 키워드·분류 2, 설명·지원 내용·자격 글 1. 지역을 말했으면 그 지역 공고 +2(전국 공고보다 앞). 분류·지역·나이·마감 임박은 거른다.

@@ -1,6 +1,7 @@
 package com.youthbenefit.ai;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -99,10 +100,13 @@ public class LlmClient {
 		if (overDailyLimit()) {
 			throw new LlmException("오늘 AI 사용 한도(" + properties.dailyTokenLimit() + " 토큰)를 다 썼어요. 내일 다시 됩니다");
 		}
-		Map<String, Object> body = Map.of("model", model, "temperature", 0,
+		Map<String, Object> body = new LinkedHashMap<>(Map.of("model", model, "temperature", properties.temperature(),
 				"messages", List.of(Map.of("role", "system", "content", system), Map.of("role", "user", "content", user)),
 				"response_format", Map.of("type", "json_schema", "json_schema",
-						Map.of("name", schemaName, "strict", true, "schema", schema)));
+						Map.of("name", schemaName, "strict", true, "schema", schema))));
+		if (properties.reasoningEffort() != null && !properties.reasoningEffort().isBlank()) {
+			body.put("reasoning_effort", properties.reasoningEffort());
+		}
 		for (int attempt = 1;; attempt++) {
 			try {
 				JsonNode response = restClient.post()

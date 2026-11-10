@@ -98,8 +98,11 @@ llm:
   # PwC LLM 게이트웨이 (글 조건 AI 변환, 자연어 검색). 주간 사용 한도가 걸려 있다. 값은 .env 에만
   base-url: ${PWC_LLM_BASE_URL:}
   api-key: ${PWC_LLM_API_KEY:}
-  model: ${PWC_LLM_MODEL:openai.gpt-4.1-mini}          # 1차 변환 (싸고 빠름)
-  review-model: ${PWC_LLM_REVIEW_MODEL:openai.gpt-4.1} # 애매한 것만 2차 확인
+  model: ${PWC_LLM_MODEL:openai.gpt-6-luna}          # 검색·1차 변환
+  review-model: ${PWC_LLM_REVIEW_MODEL:openai.gpt-6.1-sol} # 애매한 것만 2차 확인
+  # 새 모델은 temperature=0을 거절한다. 모델별 옵션도 환경변수로 조절한다
+  temperature: ${PWC_LLM_TEMPERATURE:1}
+  reasoning-effort: ${PWC_LLM_REASONING_EFFORT:none}
   timeout-seconds: 90
   # 하루(한국 시간) 토큰 한도. 넘으면 다음 날까지 AI 를 안 부른다 (주간 $50 보호). 0 이면 제한 없음
   daily-token-limit: ${PWC_LLM_DAILY_TOKEN_LIMIT:3000000}
