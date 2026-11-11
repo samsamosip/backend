@@ -108,6 +108,13 @@ llm:
   daily-token-limit: ${PWC_LLM_DAILY_TOKEN_LIMIT:3000000}
 
 search:
+  semantic:
+    enabled: ${SEARCH_SEMANTIC_ENABLED:true}
+    min-score: ${SEARCH_SEMANTIC_MIN_SCORE:0.35}
+    candidate-limit: 100
+    timeout-millis: ${SEARCH_SEMANTIC_TIMEOUT_MILLIS:3500}
+    cache-seconds: 300
+    requests-per-minute: ${SEARCH_SEMANTIC_PER_MINUTE:30}
   rate-limit:
     per-minute: ${SEARCH_RATE_PER_MINUTE:30}             # 한 사람(IP+기기) 1분 검색 수, 넘으면 429
     per-ip-per-minute: ${SEARCH_RATE_PER_IP_PER_MINUTE:300} # 한 IP 전체(같은 와이파이) 1분 검색 수

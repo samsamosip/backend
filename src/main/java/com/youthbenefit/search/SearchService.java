@@ -8,6 +8,7 @@ import com.youthbenefit.eligibility.PolicyEligibility;
 import com.youthbenefit.eligibility.ProfileFacts;
 import com.youthbenefit.eligibility.Verdict;
 import com.youthbenefit.policy.Policy;
+import com.youthbenefit.policy.PolicySource;
 import com.youthbenefit.policy.PolicyRepository;
 import com.youthbenefit.policy.PolicySummaryResponse;
 import com.youthbenefit.policy.Regions;
@@ -19,8 +20,10 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -51,6 +54,8 @@ public class SearchService {
 
 	private final UserProfileRepository profileRepository;
 
+	private final HarvesterSemanticSearch semanticSearch;
+
 	/** 화면에서 ×로 뺀 칩. dropWords 는 뺄 단어 묶음의 대표어 */
 	public record Removed(boolean region, boolean category, boolean age, boolean closingSoon, List<String> dropWords) {
 
@@ -62,10 +67,14 @@ public class SearchService {
 	 * @param understood 알아들은 조건 (화면 칩)
 	 * @param message 결과가 없을 때 안내 (WF06-b), 있으면 null
 	 * @param notice AI 해석을 못 써서 단어로 찾았을 때 안내, 아니면 null
+	 * @param semanticSearch 학교 장학 의미 검색 사용 여부와 자격 판정 전 후보 수
 	 */
 	public record SearchResponse(String query, SearchQuery understood, MatchesResponse.Counts counts,
 			List<MatchItem> content, int page, int size, long totalElements, int totalPages, String message,
-			String notice) {
+			String notice, SemanticInfo semanticSearch) {
+	}
+
+	public record SemanticInfo(boolean used, int matches, int added) {
 	}
 
 	@Transactional(readOnly = true)
@@ -101,17 +110,23 @@ public class SearchService {
 			.collect(java.util.stream.Collectors.toMap(e -> e.policy().getId(), e -> e));
 		ProfileFacts facts = eligibilityService.facts(owner);
 
-		List<Scored> found = find(open, query, today);
-		List<Ranked> ranked = found.stream().map(s -> {
+		List<Scored> lexical = find(open, query, today);
+		HarvesterSemanticSearch.Result semantic = semanticSearch.search(query);
+		Merged merged = merge(open, lexical, query, today, semantic);
+		List<Ranked> ranked = merged.candidates().stream().map(s -> {
 			PolicyCatalog.Entry entry = byId.get(s.policy().getId());
 			PolicyEligibility e = eligibilityService.judge(s.policy(), entry.condition(), facts);
 			Integer dDay = s.policy().getApplyEndDate() == null ? null
 					: (int) ChronoUnit.DAYS.between(today, s.policy().getApplyEndDate());
-			return new Ranked(s.needHits(), s.score(), new MatchItem(entry.summary(), e.verdict(), e.verdictLabel(),
+			// Semantic-only candidates sit below exact title hits; semantic agreement breaks lexical ties.
+			double score = merged.addedIds().contains(s.policy().getId())
+					? 3 * merged.scores().get(s.policy().getId())
+					: s.score() + .25 * merged.scores().getOrDefault(s.policy().getId(), 0.0);
+			return new Ranked(s.needHits(), score, new MatchItem(entry.summary(), e.verdict(), e.verdictLabel(),
 					e.summary(), dDay));
 		})
 			.sorted(Comparator.comparingInt(Ranked::needHits)
-				.thenComparingInt(Ranked::score)
+				.thenComparingDouble(Ranked::score)
 				.reversed()
 				.thenComparingInt(r -> order(r.item().verdict()))
 				.thenComparing(r -> r.item().dDay() == null ? Integer.MAX_VALUE : r.item().dDay()))
@@ -127,7 +142,9 @@ public class SearchService {
 		int to = Math.min(from + size, shown.size());
 		return new SearchResponse(text, query, counts, shown.subList(from, to), page, size, shown.size(),
 				(shown.size() + size - 1) / size, shown.isEmpty() ? emptyMessage(open, query, today, ranked.size()) : null,
-				query.ai() ? null : "지금은 AI 검색을 쉬고 있어서 단어로 찾았어요");
+				query.ai() ? null : semantic.used() ? "검색어의 단어와 비슷한 뜻의 공고를 함께 찾았어요"
+						: "지금은 AI 검색을 쉬고 있어서 단어로 찾았어요",
+				new SemanticInfo(semantic.used(), merged.scores().size(), merged.addedIds().size()));
 	}
 
 	/** 결과가 없을 때: 지역을 빼면 있는지, 불일치만 있는지 알려 준다 */
@@ -147,25 +164,48 @@ public class SearchService {
 	record Scored(Policy policy, int needHits, int score) {
 	}
 
-	private record Ranked(int needHits, int score, MatchItem item) {
+	private record Ranked(int needHits, double score, MatchItem item) {
+	}
+
+	static record Merged(List<Scored> candidates, Map<Long, Double> scores, java.util.Set<Long> addedIds) {
+	}
+
+	/** Join only already-synced, open school notices; reapply every user-selected filter before eligibility. */
+	static Merged merge(List<Policy> open, List<Scored> lexical, SearchQuery query, LocalDate today,
+			HarvesterSemanticSearch.Result semantic) {
+		Map<Long, Scored> found = new LinkedHashMap<>();
+		lexical.forEach(s -> found.put(s.policy().getId(), s));
+		Map<String, Policy> school = new java.util.HashMap<>();
+		open.stream().filter(p -> p.getSource() == PolicySource.SCHOOL && matchesFilters(p, query, today))
+			.forEach(p -> school.put(p.getSourceId(), p));
+		Map<Long, Double> scores = new java.util.HashMap<>();
+		java.util.Set<Long> added = new java.util.HashSet<>();
+		if (semantic.used()) {
+			for (HarvesterSemanticSearch.Hit hit : semantic.hits()) {
+				Policy policy = school.get(hit.sourceId());
+				if (policy == null) continue;
+				scores.put(policy.getId(), hit.score());
+				if (!found.containsKey(policy.getId())) {
+					found.put(policy.getId(), new Scored(policy, 1, 0));
+					added.add(policy.getId());
+				}
+			}
+		}
+		return new Merged(List.copyOf(found.values()), Map.copyOf(scores), java.util.Set.copyOf(added));
+	}
+
+	static boolean matchesFilters(Policy p, SearchQuery q, LocalDate today) {
+		if (!q.categories().isEmpty() && (p.getCategoryGroup() == null
+				|| Arrays.stream(p.getCategoryGroup().split(",")).map(String::strip).noneMatch(q.categories()::contains))) return false;
+		if (!q.regionCodes().isEmpty() && !inRegion(p, q.regionCodes())) return false;
+		if (q.age() != null && !ageFits(p, q.age())) return false;
+		return !q.closingSoon() || p.getApplyEndDate() != null && !p.getApplyEndDate().isAfter(today.plusDays(7));
 	}
 
 	static List<Scored> find(List<Policy> open, SearchQuery q, LocalDate today) {
 		List<Scored> out = new ArrayList<>();
 		for (Policy p : open) {
-			if (!q.categories().isEmpty() && (p.getCategoryGroup() == null
-					|| Arrays.stream(p.getCategoryGroup().split(",")).map(String::strip).noneMatch(q.categories()::contains))) {
-				continue;
-			}
-			if (!q.regionCodes().isEmpty() && !inRegion(p, q.regionCodes())) {
-				continue;
-			}
-			if (q.age() != null && !ageFits(p, q.age())) {
-				continue;
-			}
-			if (q.closingSoon() && (p.getApplyEndDate() == null || p.getApplyEndDate().isAfter(today.plusDays(7)))) {
-				continue;
-			}
+			if (!matchesFilters(p, q, today)) continue;
 			int needHits = 0;
 			int score = 0;
 			List<List<String>> required = q.keywords().isEmpty() ? q.audience() : q.keywords();

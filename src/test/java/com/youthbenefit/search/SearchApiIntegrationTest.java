@@ -44,6 +44,9 @@ class SearchApiIntegrationTest {
 	@MockitoBean
 	LlmClient llm;
 
+	@MockitoBean
+	HarvesterSemanticSearch semanticSearch;
+
 	@Autowired
 	OntongSyncService syncService;
 
@@ -63,6 +66,7 @@ class SearchApiIntegrationTest {
 		}
 		given(apiClient.fetchAll()).willReturn(items);
 		syncService.sync();
+		given(semanticSearch.search(any())).willReturn(HarvesterSemanticSearch.Result.NONE);
 		given(llm.configured()).willReturn(true);
 		given(llm.defaultModel()).willReturn("test-model");
 	}
@@ -173,6 +177,34 @@ class SearchApiIntegrationTest {
 			.andExpect(jsonPath("$.understood.ai").value(false));
 		org.mockito.Mockito.verify(llm, org.mockito.Mockito.never())
 			.json(anyString(), anyString(), eq("아침밥 한도"), anyString(), any());
+	}
+
+	@Test
+	void semanticSchoolHitIsMergedOnceAndStillJudgedAgainstTheOwnersProfile() throws Exception {
+		String sourceId = "6e08fb20-aaf4-4db2-92bb-f91c085b448c";
+		jdbc.update("update policies set source='SCHOOL', source_id=?, title='별빛 희망 장학생', "
+				+ "description='학업을 이어갈 청년에게 지원', support_content='장학 사업', keywords=null, "
+				+ "category_group='교육', nationwide=true, zip_cd=null, apply_start_date=null, apply_end_date=null, "
+				+ "apply_period_code='0057002', raw_payload=cast(? as jsonb), updated_at=now() "
+				+ "where source_id='20261002005400113836'", sourceId,
+				"{\"eligibility\":{\"academic_level_rule_status\":\"restricted\",\"academic_levels\":[\"undergraduate\"]}}");
+		answer("등록금 부담", """
+				{"need":[["등록금"]],"who":[],"categories":["교육"],"region":"","age":null,"closingSoon":false}
+				""");
+		given(semanticSearch.search(any())).willReturn(new HarvesterSemanticSearch.Result(true, List.of(
+				new HarvesterSemanticSearch.Hit(sourceId, .65), new HarvesterSemanticSearch.Hit("not-synced", .9),
+				new HarvesterSemanticSearch.Hit(sourceId, .7))));
+		mockMvc.perform(get("/api/v1/search").param("q", "등록금 부담").header("X-Anonymous-Id", newDevice()))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
+			.andExpect(jsonPath("$.content[0].policy.title").value("별빛 희망 장학생"))
+			.andExpect(jsonPath("$.content[0].policy.source").value("SCHOOL"))
+			.andExpect(jsonPath("$.semanticSearch.used").value(true))
+			.andExpect(jsonPath("$.semanticSearch.added").value(1));
+		String graduate = newDevice();
+		jdbc.update("insert into user_profiles (anonymous_id, school_cd, created_at, updated_at) values (?::uuid, '0049007', now(), now())", graduate);
+		mockMvc.perform(get("/api/v1/search").param("q", "등록금 부담").header("X-Anonymous-Id", graduate))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0))
+			.andExpect(jsonPath("$.counts.noMatch").value(1));
 	}
 
 	@Test
