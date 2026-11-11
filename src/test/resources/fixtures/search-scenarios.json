@@ -1,0 +1,576 @@
+{
+  "scenarios": [
+    {
+      "id": "personal",
+      "query": "나한테 맞는거 해줘.",
+      "expected": {
+        "emptyNeed": true,
+        "emptyWho": true,
+        "categories": [],
+        "region": null,
+        "age": null,
+        "closingSoon": false
+      }
+    },
+    {
+      "id": "profile",
+      "query": "내 조건으로 받을 수 있는 혜택 알려줘",
+      "expected": {
+        "emptyNeed": true,
+        "emptyWho": true,
+        "categories": [],
+        "region": null,
+        "age": null,
+        "closingSoon": false
+      }
+    },
+    {
+      "id": "recommend",
+      "query": "추천해줘",
+      "expected": {
+        "emptyNeed": true,
+        "emptyWho": true,
+        "categories": [],
+        "region": null,
+        "age": null,
+        "closingSoon": false
+      }
+    },
+    {
+      "id": "broad",
+      "query": "뭐 받을 수 있어?",
+      "expected": {
+        "emptyNeed": true,
+        "emptyWho": true,
+        "categories": [],
+        "region": null,
+        "age": null,
+        "closingSoon": false
+      }
+    },
+    {
+      "id": "personal-region-age",
+      "query": "인천 사는 24살인데 나한테 맞는 지원 좀 알려줘",
+      "expected": {
+        "emptyNeed": true,
+        "emptyWho": true,
+        "categories": [],
+        "region": "인천",
+        "age": 24
+      }
+    },
+    {
+      "id": "student-context",
+      "query": "대학생인데 받을 수 있는 거 있어?",
+      "expected": {
+        "emptyNeed": true,
+        "whoAny": [
+          "대학생",
+          "재학생"
+        ],
+        "categories": [],
+        "age": null
+      }
+    },
+    {
+      "id": "married-context",
+      "query": "결혼했는데 받을 수 있는 혜택 뭐 있어?",
+      "expected": {
+        "emptyNeed": true,
+        "whoAny": [
+          "신혼",
+          "기혼",
+          "결혼",
+          "혼인"
+        ],
+        "categories": [],
+        "age": null
+      }
+    },
+    {
+      "id": "rent",
+      "query": "월세가 너무 부담돼",
+      "expected": {
+        "needAny": [
+          "월세",
+          "주거비",
+          "임차료"
+        ],
+        "categories": [
+          "주거"
+        ],
+        "age": null,
+        "include": [
+          "rent"
+        ],
+        "exclude": [
+          "tuition"
+        ]
+      }
+    },
+    {
+      "id": "scholarship",
+      "query": "인천 대학생 등록금 지원",
+      "expected": {
+        "needAny": [
+          "장학",
+          "등록금",
+          "학비",
+          "학자금"
+        ],
+        "whoAny": [
+          "대학생",
+          "재학생"
+        ],
+        "categories": [
+          "교육"
+        ],
+        "region": "인천",
+        "include": [
+          "scholarship"
+        ]
+      }
+    },
+    {
+      "id": "interview",
+      "query": "면접 보러 가는데 입을 정장이 없어",
+      "expected": {
+        "needAny": [
+          "정장",
+          "면접복"
+        ],
+        "categories": [
+          "일자리"
+        ],
+        "include": [
+          "suit"
+        ],
+        "exclude": [
+          "job-fair"
+        ]
+      }
+    },
+    {
+      "id": "toeic",
+      "query": "토익 응시료 지원 있어?",
+      "expected": {
+        "needAny": [
+          "응시료",
+          "응시비",
+          "시험비"
+        ],
+        "include": [
+          "exam"
+        ],
+        "exclude": [
+          "language-course"
+        ]
+      }
+    },
+    {
+      "id": "jeonse-interest",
+      "query": "전세 대출 이자 지원 찾고 있어",
+      "expected": {
+        "needAny": [
+          "전세",
+          "임차보증금",
+          "주택"
+        ],
+        "categories": [
+          "주거"
+        ],
+        "include": [
+          "jeonse"
+        ],
+        "exclude": [
+          "tuition-loan"
+        ]
+      }
+    },
+    {
+      "id": "moving",
+      "query": "이사할 때 부동산 수수료랑 이삿짐 비용 지원",
+      "expected": {
+        "needAny": [
+          "이사",
+          "중개",
+          "중개보수",
+          "이전비"
+        ],
+        "categories": [
+          "주거"
+        ],
+        "include": [
+          "moving"
+        ]
+      }
+    },
+    {
+      "id": "startup",
+      "query": "카페 창업하고 싶은데 교육이나 자금 지원",
+      "expected": {
+        "needAny": [
+          "창업",
+          "스타트업"
+        ],
+        "categories": [
+          "일자리"
+        ],
+        "include": [
+          "startup"
+        ]
+      }
+    },
+    {
+      "id": "counseling",
+      "query": "요즘 우울하고 힘든데 상담 받을 곳 있을까",
+      "expected": {
+        "needAny": [
+          "상담",
+          "심리",
+          "마음",
+          "정신건강"
+        ],
+        "categories": [
+          "복지문화"
+        ],
+        "include": [
+          "counseling"
+        ]
+      }
+    },
+    {
+      "id": "non-student",
+      "query": "대학생은 아닌데 월세 지원 받을 수 있어?",
+      "expected": {
+        "needAny": [
+          "월세",
+          "주거비",
+          "임차료"
+        ],
+        "emptyWho": true,
+        "categories": [
+          "주거"
+        ],
+        "forbidden": [
+          "대학생",
+          "재학생"
+        ],
+        "include": [
+          "rent"
+        ]
+      }
+    },
+    {
+      "id": "exclude-loans",
+      "query": "대출 말고 갚지 않아도 되는 장학금 알려줘",
+      "expected": {
+        "needAny": [
+          "장학"
+        ],
+        "forbidden": [
+          "대출",
+          "융자",
+          "이자",
+          "학자금대출"
+        ],
+        "categories": [
+          "교육"
+        ],
+        "include": [
+          "scholarship"
+        ],
+        "exclude": [
+          "tuition-loan"
+        ]
+      }
+    },
+    {
+      "id": "parent-age",
+      "query": "엄마는 60살이고 나는 24살이야. 월세 지원 찾아줘",
+      "expected": {
+        "needAny": [
+          "월세"
+        ],
+        "age": 24,
+        "categories": [
+          "주거"
+        ]
+      }
+    },
+    {
+      "id": "age-decade",
+      "query": "30대인데 취업 준비 도움받을 수 있어?",
+      "expected": {
+        "age": null,
+        "whoAny": [
+          "구직",
+          "미취업",
+          "취업준비",
+          "취준"
+        ],
+        "forbidden": [
+          "30대",
+          "30살"
+        ],
+        "categories": [
+          "일자리"
+        ]
+      }
+    },
+    {
+      "id": "relative-age",
+      "query": "내년에 25살인데 이번 주 마감하는 월세 지원",
+      "expected": {
+        "age": null,
+        "closingSoon": true,
+        "needAny": [
+          "월세"
+        ],
+        "categories": [
+          "주거"
+        ]
+      }
+    },
+    {
+      "id": "student-not-education",
+      "query": "대학생이고 운동이나 문화생활 지원 받고 싶어",
+      "expected": {
+        "whoAny": [
+          "대학생",
+          "재학생"
+        ],
+        "categories": [
+          "복지문화"
+        ],
+        "forbidden": [
+          "장학금",
+          "등록금"
+        ]
+      }
+    },
+    {
+      "id": "broad-support",
+      "query": "청년 지원금 뭐 있어?",
+      "expected": {
+        "emptyNeed": true,
+        "emptyWho": true,
+        "categories": [],
+        "age": null
+      }
+    }
+  ],
+  "policies": [
+    {
+      "id": "rent",
+      "title": "청년 월세 한시 특별지원",
+      "description": "월세 및 주거비를 지원합니다.",
+      "category": "주거"
+    },
+    {
+      "id": "scholarship",
+      "title": "대학생 등록금 장학금 지원",
+      "description": "대학 재학생에게 장학금을 지급합니다.",
+      "category": "교육"
+    },
+    {
+      "id": "tuition",
+      "title": "대학생 학습 멘토링",
+      "description": "대학생 대상 멘토링 프로그램",
+      "category": "교육"
+    },
+    {
+      "id": "tuition-loan",
+      "title": "학자금대출 이자 지원",
+      "description": "대학생의 학자금 대출 이자를 지원합니다.",
+      "category": "교육"
+    },
+    {
+      "id": "jeonse",
+      "title": "청년 주택임차보증금 이자지원",
+      "description": "전세자금 대출이자를 지원합니다.",
+      "category": "주거"
+    },
+    {
+      "id": "suit",
+      "title": "청년 면접 정장 무료 대여",
+      "description": "면접복 및 구두를 빌려드립니다.",
+      "category": "일자리"
+    },
+    {
+      "id": "job-fair",
+      "title": "청년 취업 박람회",
+      "description": "기업 면접과 채용 설명회",
+      "category": "일자리"
+    },
+    {
+      "id": "exam",
+      "title": "청년 어학시험 응시료 지원",
+      "description": "토익 등 어학 자격시험 응시비를 지원합니다.",
+      "category": "일자리"
+    },
+    {
+      "id": "language-course",
+      "title": "외국어 교육 프로그램",
+      "description": "토익 강좌와 어학 수강료 지원",
+      "category": "교육"
+    },
+    {
+      "id": "moving",
+      "title": "청년 이사비 및 중개보수 지원",
+      "description": "주거 이전에 필요한 이삿짐 비용 및 부동산 중개수수료 지원",
+      "category": "주거"
+    },
+    {
+      "id": "startup",
+      "title": "청년 창업 아카데미",
+      "description": "예비창업자를 위한 교육 및 사업화 자금",
+      "category": "일자리"
+    },
+    {
+      "id": "counseling",
+      "title": "청년 마음건강 심리상담",
+      "description": "정신건강 상담 서비스",
+      "category": "복지문화"
+    },
+    {
+      "id": "culture",
+      "title": "청년 문화예술패스",
+      "description": "공연 전시 관람 바우처",
+      "category": "복지문화"
+    }
+  ],
+  "holdout": [
+    {
+      "id": "holdout-personal",
+      "query": "내가 신청할 수 있는 것만 모아서 보여줘",
+      "expected": {
+        "emptyNeed": true,
+        "emptyWho": true,
+        "categories": [],
+        "age": null
+      }
+    },
+    {
+      "id": "holdout-location",
+      "query": "인천 살고 26살이야. 내 조건에 맞는 거 보여줘",
+      "expected": {
+        "emptyNeed": true,
+        "emptyWho": true,
+        "region": "인천",
+        "age": 26,
+        "categories": []
+      }
+    },
+    {
+      "id": "holdout-saved-profile",
+      "query": "등록한 내 정보 기준으로 추천 좀",
+      "expected": {
+        "emptyNeed": true,
+        "emptyWho": true,
+        "age": null,
+        "region": null,
+        "categories": []
+      }
+    },
+    {
+      "id": "holdout-student-rent",
+      "query": "대학생인데 매달 내는 월세가 빠듯해",
+      "expected": {
+        "needAny": [
+          "월세",
+          "주거비",
+          "임차료"
+        ],
+        "whoAny": [
+          "대학생",
+          "재학생"
+        ],
+        "categories": [
+          "주거"
+        ],
+        "include": [
+          "rent"
+        ]
+      }
+    },
+    {
+      "id": "holdout-interview",
+      "query": "부산 사는 만 32세 취준생이야. 면접 볼 옷 빌리고 싶어",
+      "expected": {
+        "needAny": [
+          "정장",
+          "면접복"
+        ],
+        "age": 32,
+        "region": "부산",
+        "categories": [
+          "일자리"
+        ],
+        "include": [
+          "suit"
+        ],
+        "exclude": [
+          "job-fair"
+        ]
+      }
+    },
+    {
+      "id": "holdout-exam",
+      "query": "토익 수강료보다는 시험 보는 비용 지원받고 싶어",
+      "expected": {
+        "needAny": [
+          "응시료",
+          "응시비",
+          "시험비"
+        ],
+        "forbidden": [
+          "수강료"
+        ],
+        "include": [
+          "exam"
+        ],
+        "exclude": [
+          "language-course"
+        ]
+      }
+    },
+    {
+      "id": "holdout-startup",
+      "query": "취업 말고 창업 교육 찾아줘",
+      "expected": {
+        "needAny": [
+          "창업"
+        ],
+        "categories": [
+          "일자리"
+        ],
+        "include": [
+          "startup"
+        ],
+        "exclude": [
+          "job-fair"
+        ]
+      }
+    },
+    {
+      "id": "holdout-unrelated",
+      "query": "강아지 미용 쿠폰",
+      "expected": {
+        "needAny": [
+          "강아지",
+          "애견",
+          "반려견",
+          "반려동물"
+        ],
+        "exclude": [
+          "rent",
+          "scholarship",
+          "exam",
+          "startup",
+          "counseling"
+        ]
+      }
+    }
+  ]
+}

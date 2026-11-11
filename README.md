@@ -477,6 +477,33 @@ PwC LLM(기본 `openai.gpt-6-luna`)으로 판정 규칙으로 바꿔 `policies.a
 - 서류 목록은 학교 장학처럼 정리된 목록(`checklist_documents`)으로 저장해 체크리스트가 그대로 만들어진다.
 - 로그인하면 계정으로 옮겨지고, 내 데이터 삭제·탈퇴 때 같이 지워진다.
 
+### 검색 의도 시나리오 검증
+
+"나한테 맞는 거 해줘"처럼 구체적인 분야가 없는 요청은 키워드를 만들지 않는다.
+AI가 반환한 정상적인 빈 조건도 그대로 캐시하고, 서버가 요청한 사람의 프로필로 공고를 판정한다.
+프로필은 AI에 전송하지 않으며, 같은 문장의 캐시를 공유해도 자격 판정은 사용자별로 다시 한다.
+응답 형식 오류·AI 호출 실패일 때만 단어 검색으로 대체한다.
+
+프롬프트에는 서비스 범위(정부 정책·학교 장학), 실제 부분 문자열 검색 방식, 강한 지역·분류 필터의 영향,
+맞춤 추천·복합 지원·부정 표현·본인 현재 나이 규칙과 입출력 예시를 둔다.
+Harvester의 hybrid/vector 검색은 이 backend 검색에 연결되어 있지 않다(현재는 주기적 공고 수집만 사용).
+
+- 고정 시나리오: `src/test/resources/fixtures/search-scenarios.json`. 비교용 22문장과 별도 확인용 8문장,
+  무관한 결과가 섞이는지 확인할 통제 공고 13개를 포함한다.
+- 아래 명령은 `.env` 또는 실행 환경의 `PWC_LLM_*`로 실제 AI를 호출하고, 실제 `QueryInterpreter.parse`와
+  `SearchService.find`를 거쳐 의도와 공고 후보를 검사한다. 일반 `./gradlew test`에서는 AI를 호출하지 않는다.
+
+```bash
+./gradlew evalSearch
+./gradlew evalSearch -PevalSuite=holdout -PevalOutput=build/search-holdout.json
+# 변경 전 프롬프트를 별도 파일로 준비해 비교할 때 (이전 빈 조건 fallback도 재현):
+./gradlew evalSearch -PevalPrompt=/path/to/previous-prompt.txt -PevalLegacy=true -PevalOutput=build/search-before.json
+```
+
+2026-11-11 GPT-6 Luna, temperature=1, reasoning_effort=none 기준:
+같은 22문장 기준 통과 13 → 22, 별도 8문장 8개 통과. 단일 실행에서의 회귀 검증이며 전체 검색 정확도를 뜻하지 않는다.
+후보 공고 검사는 통제 데이터 기준이고, 운영 전체 공고의 순위 품질 측정과는 구별한다.
+
 ### 링크·캡처 불러오기 (WF07 2차)
 
 설계: [공고 불러오기 API 설계](https://claude.ai/artifact/928VGH3xNXfGR59HbnPYmr) (백엔드 ↔ 불러오기 서버). 불러오기 서버는 AI 팀원이 policy-harvester 안에 만들었다

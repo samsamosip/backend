@@ -49,3 +49,16 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+// Manual, paid live-model evaluation. Normal tests never call a provider.
+tasks.register('evalSearch', JavaExec) {
+	dependsOn testClasses
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.youthbenefit.search.SearchScenarioEvaluation'
+	systemProperty 'search.eval.suite', providers.gradleProperty('evalSuite').getOrElse('scenarios')
+	args providers.gradleProperty('evalOutput').getOrElse('build/search-evaluation.json')
+	if (providers.gradleProperty('evalPrompt').isPresent()) {
+		args providers.gradleProperty('evalPrompt').get()
+		if (providers.gradleProperty('evalLegacy').getOrElse('false') == 'true') args 'legacy'
+	}
+}

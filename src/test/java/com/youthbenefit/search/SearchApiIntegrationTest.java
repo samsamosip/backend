@@ -84,6 +84,36 @@ class SearchApiIntegrationTest {
 	}
 
 	@Test
+	void personalizedSearchUsesEachOwnersProfileWithoutInventedKeywords() throws Exception {
+		String q = "나한테 맞는거 해줘.";
+		answer(q, """
+				{"need":[],"who":[],"categories":[],"region":"","age":null,"closingSoon":false}
+				""");
+		// Restrict the controlled open-policy fixture so the profile must affect eligibility.
+		jdbc.update("update policies set nationwide=true, zip_cd=null, school_cd='0049005', "
+				+ "mrg_stts_cd='0055003', job_cd='0013010', sprt_trgt_age_lmt_yn='Y', "
+				+ "sprt_trgt_min_age=0, sprt_trgt_max_age=0, add_aply_qlfc_cnd_cn=null, ptcp_prp_trgt_cn=null, updated_at=now()");
+		String student = newDevice();
+		String graduate = newDevice();
+		jdbc.update("insert into user_profiles (anonymous_id, school_cd, created_at, updated_at) values (?::uuid, '0049005', now(), now())", student);
+		jdbc.update("insert into user_profiles (anonymous_id, school_cd, created_at, updated_at) values (?::uuid, '0049007', now(), now())", graduate);
+		mockMvc.perform(get("/api/v1/search").param("q", q).header("X-Anonymous-Id", student))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.understood.ai").value(true))
+			.andExpect(jsonPath("$.understood.keywords").isEmpty())
+			.andExpect(jsonPath("$.totalElements").value(org.hamcrest.Matchers.greaterThan(0)))
+			.andExpect(jsonPath("$.notice").doesNotExist());
+		// The same cached interpretation must not reuse the previous owner's profile.
+		mockMvc.perform(get("/api/v1/search").param("q", q).header("X-Anonymous-Id", graduate))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.understood.ai").value(true))
+			.andExpect(jsonPath("$.totalElements").value(0));
+		// No profile means unknown eligibility; no age/school facts should be fabricated.
+		mockMvc.perform(get("/api/v1/search").param("q", q).header("X-Anonymous-Id", newDevice()))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.understood.age").doesNotExist())
+			.andExpect(jsonPath("$.understood.audience").isEmpty())
+			.andExpect(jsonPath("$.counts.needsCheck").value(org.hamcrest.Matchers.greaterThan(0)));
+	}
+
+	@Test
 	void noResultSaysSo() throws Exception {
 		answer("강아지 미용", """
 				{"need": [["애견미용"]], "who": [], "categories": [], "region": "", "age": null, "closingSoon": false}
