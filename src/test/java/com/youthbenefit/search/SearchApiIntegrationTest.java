@@ -204,7 +204,13 @@ class SearchApiIntegrationTest {
 		jdbc.update("insert into user_profiles (anonymous_id, school_cd, created_at, updated_at) values (?::uuid, '0049007', now(), now())", graduate);
 		mockMvc.perform(get("/api/v1/search").param("q", "등록금 부담").header("X-Anonymous-Id", graduate))
 			.andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0))
-			.andExpect(jsonPath("$.counts.noMatch").value(1));
+			.andExpect(jsonPath("$.counts.noMatch").value(1))
+			.andExpect(jsonPath("$.message").value("관련 공고 1개가 있지만, 저장한 내 정보와 신청 조건이 달라요."));
+		mockMvc.perform(get("/api/v1/search").param("q", "등록금 부담").param("includeNoMatch", "true")
+				.header("X-Anonymous-Id", graduate))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
+			.andExpect(jsonPath("$.content[0].verdict").value("NO_MATCH"))
+			.andExpect(jsonPath("$.message").doesNotExist());
 	}
 
 	@Test

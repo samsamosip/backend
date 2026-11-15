@@ -150,7 +150,7 @@ public class SearchService {
 	/** 결과가 없을 때: 지역을 빼면 있는지, 불일치만 있는지 알려 준다 */
 	private String emptyMessage(List<Policy> open, SearchQuery query, LocalDate today, int allVerdicts) {
 		if (allVerdicts > 0) {
-			return "찾은 공고 " + allVerdicts + "개가 모두 내 조건과 맞지 않아요. 불일치도 보려면 includeNoMatch=true";
+			return "관련 공고 " + allVerdicts + "개가 있지만, 저장한 내 정보와 신청 조건이 달라요.";
 		}
 		if (!query.regionCodes().isEmpty()) {
 			int withoutRegion = find(open, query.withoutRegion(), today).size();
