@@ -48,6 +48,8 @@ public class QueryInterpreter {
 	/** @param allowAi false 면(사용량 제한) 기억해 둔 해석이 없을 때 단어로만 찾는다 */
 	public SearchQuery interpret(String text, boolean allowAi) {
 		String key = text.strip().replaceAll("\\s+", " ");
+		SearchQuery example = SearchExamples.query(key);
+		if (example != null) return example;
 		SearchQuery cached = cache.get(key);
 		if (cached != null) {
 			return cached;

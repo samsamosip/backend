@@ -219,6 +219,72 @@ class SearchApiIntegrationTest {
 			.andExpect(jsonPath("$.errors.q").exists());
 	}
 
+	@Test
+	void examplesOnlyIncludeVisibleResultsForTheCurrentProfileWithoutExternalSearchCalls() throws Exception {
+		prepareExamplePolicies("월세 지원", "주거");
+		String student = newDevice();
+		String graduate = newDevice();
+		jdbc.update("insert into user_profiles (anonymous_id, school_cd, created_at, updated_at) values (?::uuid, '0049005', now(), now())", student);
+		jdbc.update("insert into user_profiles (anonymous_id, school_cd, created_at, updated_at) values (?::uuid, '0049007', now(), now())", graduate);
+		mockMvc.perform(get("/api/v1/search/examples").header("X-Anonymous-Id", student))
+			.andExpect(status().isOk()).andExpect(jsonPath("$[0].text").value("월세 지원받을 수 있는 거 있어?"));
+		mockMvc.perform(get("/api/v1/search/examples").header("X-Anonymous-Id", graduate))
+			.andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+		mockMvc.perform(get("/api/v1/search/examples").header("X-Anonymous-Id", newDevice()))
+			.andExpect(status().isOk()).andExpect(jsonPath("$[0].needsCheck").value(org.hamcrest.Matchers.greaterThan(0)));
+		org.mockito.Mockito.verify(semanticSearch, org.mockito.Mockito.never()).search(any());
+		mockMvc.perform(get("/api/v1/search").param("q", "월세 지원받을 수 있는 거 있어?").header("X-Anonymous-Id", student))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(org.hamcrest.Matchers.greaterThan(0)))
+			.andExpect(jsonPath("$.understood.ai").value(false)).andExpect(jsonPath("$.notice").doesNotExist());
+		org.mockito.Mockito.verify(llm, org.mockito.Mockito.never()).json(anyString(), anyString(), anyString(), anyString(), any());
+	}
+
+	@Test
+	void exampleSuggestionsRefreshWhenTheSavedRegionChanges() throws Exception {
+		prepareExamplePolicies("월세 지원", "주거");
+		jdbc.update("update policies set nationwide=false, sido_codes='11', zip_cd=null, updated_at=now()");
+		String owner = newDevice();
+		jdbc.update("insert into user_profiles (anonymous_id, school_cd, zip_cd, created_at, updated_at) values (?::uuid, '0049005', '28177', now(), now())", owner);
+		mockMvc.perform(get("/api/v1/search/examples").header("X-Anonymous-Id", owner))
+			.andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+		jdbc.update("update user_profiles set zip_cd='11110', updated_at=now() where anonymous_id=?::uuid", owner);
+		mockMvc.perform(get("/api/v1/search/examples").header("X-Anonymous-Id", owner))
+			.andExpect(status().isOk()).andExpect(jsonPath("$[0].text").value("월세 지원받을 수 있는 거 있어?"));
+	}
+
+	@Test
+	void generalExampleIsUsedWhenOnlyOtherTopicsAreAvailable() throws Exception {
+		prepareExamplePolicies("독서 모임", "복지문화");
+		mockMvc.perform(get("/api/v1/search/examples").header("X-Anonymous-Id", newDevice()))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+			.andExpect(jsonPath("$[0].text").value("내 조건에 맞는 혜택 찾아줘"));
+	}
+
+	@Test
+	void builtInExamplesDoNotConsumeTheAiQuota() throws Exception {
+		String owner = newDevice();
+		for (int i = 0; i < 2; i++) {
+			mockMvc.perform(get("/api/v1/search").param("q", "월세 지원받을 수 있는 거 있어?").header("X-Anonymous-Id", owner))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.understood.ai").value(false));
+		}
+		for (int i = 0; i < 2; i++) {
+			String q = "예시 이후 아침밥 " + i;
+			answer(q, """
+					{"need":[["아침밥"]],"who":[],"categories":[],"region":"","age":null,"closingSoon":false}
+					""");
+			mockMvc.perform(get("/api/v1/search").param("q", q).header("X-Anonymous-Id", owner))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.understood.ai").value(true));
+		}
+	}
+
+	private void prepareExamplePolicies(String title, String category) {
+		jdbc.update("update policies set title=?, description=?, support_content=?, keywords=?, category_group=?, "
+				+ "nationwide=true, zip_cd=null, apply_start_date=null, apply_end_date=null, apply_period_code='0057002', "
+				+ "school_cd='0049005', mrg_stts_cd='0055003', job_cd='0013010', sprt_trgt_age_lmt_yn='Y', "
+				+ "sprt_trgt_min_age=0, sprt_trgt_max_age=0, add_aply_qlfc_cnd_cn=null, ptcp_prp_trgt_cn=null, updated_at=now()",
+				title, title, title, title, category);
+	}
+
 	/** 테스트마다 다른 기기 — 사용량 제한을 따로 센다 */
 	private static String newDevice() {
 		return java.util.UUID.randomUUID().toString();

@@ -72,8 +72,15 @@ public class SearchController {
 		}
 		usage.count(UsageRecorder.SEARCH);
 		var removed = new SearchService.Removed(noRegion, noCategory, noAge, noClosingSoon, drop == null ? List.of() : drop);
+		boolean knownExample = SearchExamples.query(q.strip().replaceAll("\\s+", " ")) != null;
 		return service.search(owner, q, removed, includeNoMatch, Math.max(page, 0), Math.clamp(size, 1, 100),
-				aiPerClient.tryAcquire(client));
+				!knownExample && aiPerClient.tryAcquire(client));
+	}
+
+	@Operation(summary = "내 조건에서 결과가 있는 검색 예시", description = "현재 신청 가능한 공고와 저장한 내 정보로 조건 일치·확인 필요 결과가 있는 예시만 반환한다. AI와 의미 검색 API는 호출하지 않는다.")
+	@GetMapping("/api/v1/search/examples")
+	public List<SearchService.ExampleSuggestion> examples(@CurrentOwner(required = false) UUID owner) {
+		return service.examples(owner);
 	}
 
 }

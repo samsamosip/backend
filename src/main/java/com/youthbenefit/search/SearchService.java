@@ -77,6 +77,44 @@ public class SearchService {
 	public record SemanticInfo(boolean used, int matches, int added) {
 	}
 
+	public record ExampleSuggestion(String text, long match, long needsCheck) {
+	}
+
+	/** 현재 신청 가능한 공고와 내 정보만 비교해 실제로 결과가 있는 예시를 반환한다. */
+	@Transactional(readOnly = true)
+	public List<ExampleSuggestion> examples(UUID owner) {
+		LocalDate today = LocalDate.now(KST);
+		List<PolicyCatalog.Entry> entries = catalog.open(today);
+		List<Policy> open = entries.stream().map(PolicyCatalog.Entry::policy).toList();
+		Map<Long, PolicyCatalog.Entry> byId = entries.stream()
+			.collect(java.util.stream.Collectors.toMap(entry -> entry.policy().getId(), entry -> entry));
+		ProfileFacts facts = eligibilityService.facts(owner);
+		String zip = owner == null ? null : profileRepository.findByAnonymousId(owner).map(UserProfile::getZipCd).orElse(null);
+		Map<Long, Verdict> verdicts = new java.util.HashMap<>();
+		List<ExampleSuggestion> suggestions = new ArrayList<>();
+		List<SearchExamples.Example> candidates = new ArrayList<>(SearchExamples.TOPICS);
+		candidates.add(SearchExamples.GENERAL);
+		for (SearchExamples.Example example : candidates) {
+			if (example == SearchExamples.GENERAL && !suggestions.isEmpty()) break;
+			List<Verdict> found = find(open, withProfileRegion(example.query(), zip), today).stream()
+				.map(scored -> verdicts.computeIfAbsent(scored.policy().getId(), id -> {
+					PolicyCatalog.Entry entry = byId.get(id);
+					return eligibilityService.judge(entry.policy(), entry.condition(), facts).verdict();
+				})).toList();
+			long match = found.stream().filter(verdict -> verdict == Verdict.MATCH).count();
+			long needsCheck = found.stream().filter(verdict -> verdict == Verdict.NEEDS_CHECK).count();
+			if (match + needsCheck > 0) suggestions.add(new ExampleSuggestion(example.text(), match, needsCheck));
+		}
+		return suggestions.stream().sorted(Comparator.comparingLong(ExampleSuggestion::match).reversed()).toList();
+	}
+
+	private static SearchQuery withProfileRegion(SearchQuery query, String zip) {
+		if (query.regionCodes().isEmpty() && zip != null && zip.length() >= 2 && Regions.sidoName(zip.substring(0, 2)) != null) {
+			return query.withProfileRegion(Regions.sidoName(zip.substring(0, 2)), List.of(zip.substring(0, 2)));
+		}
+		return query;
+	}
+
 	@Transactional(readOnly = true)
 	public SearchResponse search(UUID owner, String text, boolean includeNoMatch, int page, int size) {
 		return search(owner, text, includeNoMatch, page, size, true);
@@ -97,9 +135,7 @@ public class SearchService {
 		SearchQuery query = interpreter.interpret(text, allowAi);
 		if (query.regionCodes().isEmpty() && !removed.region() && owner != null) {
 			String zip = profileRepository.findByAnonymousId(owner).map(UserProfile::getZipCd).orElse(null);
-			if (zip != null && zip.length() >= 2 && Regions.sidoName(zip.substring(0, 2)) != null) {
-				query = query.withProfileRegion(Regions.sidoName(zip.substring(0, 2)), List.of(zip.substring(0, 2)));
-			}
+			query = withProfileRegion(query, zip);
 		}
 		query = query.without(removed.region(), removed.category(), removed.age(), removed.closingSoon(),
 				removed.dropWords());
@@ -140,9 +176,10 @@ public class SearchService {
 			.toList();
 		int from = Math.min(page * size, shown.size());
 		int to = Math.min(from + size, shown.size());
+		boolean knownExample = SearchExamples.query(text.strip().replaceAll("\\s+", " ")) != null;
 		return new SearchResponse(text, query, counts, shown.subList(from, to), page, size, shown.size(),
 				(shown.size() + size - 1) / size, shown.isEmpty() ? emptyMessage(open, query, today, ranked.size()) : null,
-				query.ai() ? null : semantic.used() ? "검색어의 단어와 비슷한 뜻의 공고를 함께 찾았어요"
+				query.ai() || knownExample ? null : semantic.used() ? "검색어의 단어와 비슷한 뜻의 공고를 함께 찾았어요"
 						: "지금은 AI 검색을 쉬고 있어서 단어로 찾았어요",
 				new SemanticInfo(semantic.used(), merged.scores().size(), merged.addedIds().size()));
 	}

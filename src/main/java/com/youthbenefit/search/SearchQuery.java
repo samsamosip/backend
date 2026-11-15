@@ -12,7 +12,7 @@ import java.util.List;
  * @param regionCodes 지역 코드(시도 2자리 또는 시군구 5자리)
  * @param age 나이(만), 없으면 null
  * @param closingSoon "마감 임박", "이번 주" → 7일 안에 마감
- * @param ai AI 가 해석했는지(false 면 단어로만 찾음)
+ * @param ai AI 가 해석했는지(정해진 예시와 단어 검색은 false)
  * @param regionFromProfile 문장에 지역이 없어서 내 프로필 지역을 쓴 경우(화면 칩 "내 지역 · 인천")
  */
 public record SearchQuery(List<List<String>> keywords, List<List<String>> audience, List<String> categories,
