@@ -9,9 +9,8 @@ public final class AuthRequests {
 	private AuthRequests() {
 	}
 
-	public record Signup(@NotBlank(message = "이메일을 입력해 주세요") String email,
-			@NotBlank(message = "비밀번호를 입력해 주세요") String password,
-			@NotBlank(message = "닉네임을 입력해 주세요") @Size(min = 2, max = 10, message = "닉네임은 2~10자로 써 주세요") String nickname) {
+	/** 칸마다의 검사는 AuthService.signup 이 한 번에 모아서 한다(틀린 칸을 한꺼번에 알려 주려고) */
+	public record Signup(String email, String password, String nickname) {
 	}
 
 	public record Email(@NotBlank(message = "이메일을 입력해 주세요") String email) {

@@ -80,12 +80,31 @@ public class AuthService {
 
 	public CodeSent signup(String rawEmail, String password, String nickname) {
 		String email = normalizeEmail(rawEmail);
+		// 이메일·비밀번호·닉네임에서 틀린 곳을 한 번에 모아서 알려 준다(하나 고치면 다음 오류가 나오지 않게)
 		Map<String, String> errors = new LinkedHashMap<>();
-		checkEmail(errors, email);
-		checkPassword(errors, "password", password);
+		if (email.isEmpty()) {
+			errors.put("email", "이메일을 입력해 주세요");
+		}
+		else {
+			checkEmail(errors, email);
+		}
+		if (password == null || password.isEmpty()) {
+			errors.put("password", "비밀번호를 입력해 주세요");
+		}
+		else {
+			checkPassword(errors, "password", password);
+		}
+		String name = nickname == null ? "" : nickname.strip();
+		if (name.isEmpty()) {
+			errors.put("nickname", "닉네임을 입력해 주세요");
+		}
+		else if (name.length() < 2 || name.length() > 10) {
+			errors.put("nickname", "닉네임은 2~10자로 써 주세요");
+		}
 		if (!errors.isEmpty()) {
 			throw new InvalidRequestException(errors);
 		}
+		nickname = name;
 		User user = users.findByEmail(email).orElse(null);
 		if (user != null && user.isEmailVerified()) {
 			throw new ApiException(HttpStatus.CONFLICT, "EMAIL_TAKEN", "이미 가입된 이메일이에요. 로그인해 주세요.");

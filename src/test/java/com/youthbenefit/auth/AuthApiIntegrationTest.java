@@ -177,6 +177,22 @@ class AuthApiIntegrationTest {
 	}
 
 	@Test
+	void signupReportsEveryWrongFieldAtOnce() throws Exception {
+		// 예전엔 닉네임 오류만 먼저 나오고, 고치면 그제야 비밀번호 오류가 나왔다
+		signup("not-an-email", "123", "가").andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.errors.email").value("이메일 주소를 확인해 주세요"))
+			.andExpect(jsonPath("$.errors.password").exists())
+			.andExpect(jsonPath("$.errors.nickname").value("닉네임은 2~10자로 써 주세요"));
+		signup("", "", "").andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.errors.email").value("이메일을 입력해 주세요"))
+			.andExpect(jsonPath("$.errors.password").value("비밀번호를 입력해 주세요"))
+			.andExpect(jsonPath("$.errors.nickname").value("닉네임을 입력해 주세요"));
+		// 닉네임 앞뒤 공백은 지우고 센다
+		signup("trim@example.com", "good1pass", "  홍길동  ").andExpect(status().isAccepted());
+		verify(mailer, Mockito.times(1)).sendCode(anyString(), Mockito.any(), anyString());
+	}
+
+	@Test
 	void nicknameIsTwoToTenCharacters() throws Exception {
 		signup("n1@example.com", "good1pass", "가").andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.errors.nickname").value("닉네임은 2~10자로 써 주세요"));
