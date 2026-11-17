@@ -24,6 +24,11 @@ public record SearchQuery(List<List<String>> keywords, List<List<String>> audien
 	}
 
 	/** 지역 조건을 뺀 것 (결과 없을 때 "지역을 빼면 n개" 안내용) */
+	/** 원하는 것(need)을 빼고 신청자 상황·분류·지역으로만 (결과가 너무 적을 때 넓혀 찾기) */
+	SearchQuery withoutKeywords() {
+		return new SearchQuery(List.of(), audience, categories, region, regionCodes, age, closingSoon, ai, regionFromProfile);
+	}
+
 	SearchQuery withoutRegion() {
 		return new SearchQuery(keywords, audience, categories, null, List.of(), age, closingSoon, ai, false);
 	}

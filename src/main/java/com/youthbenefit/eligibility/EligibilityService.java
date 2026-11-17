@@ -147,7 +147,7 @@ public class EligibilityService {
 	}
 
 	/** 현금·대출·이자·바우처처럼 돈이 되는 지원인지 (금액을 알거나 종류가 그렇다) */
-	static boolean givesMoney(com.youthbenefit.policy.Support support) {
+	public static boolean givesMoney(com.youthbenefit.policy.Support support) {
 		// Set.of(...).contains(null) 은 예외라 종류가 없을 때를 먼저 거른다
 		return support != null && (support.amountWon() != null || support.kind() != null
 				&& java.util.Set.of("CASH", "LOAN", "INTEREST", "VOUCHER").contains(support.kind()));

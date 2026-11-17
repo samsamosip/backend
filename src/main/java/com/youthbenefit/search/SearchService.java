@@ -147,6 +147,20 @@ public class SearchService {
 		ProfileFacts facts = eligibilityService.facts(owner);
 
 		List<Scored> lexical = find(open, query, today);
+		// AI 해석이 좁게 나와 찾은 공고가 몇 개 안 되면("구직수당"은 "구직활동수당"에 안 걸린다) 신청자 상황으로 넓혀 찾아 뒤에 붙인다
+		boolean broadened = false;
+		if (lexical.size() < FEW_RESULTS && !query.keywords().isEmpty() && !query.audience().isEmpty()) {
+			java.util.Set<Long> seen = new java.util.HashSet<>();
+			lexical.forEach(s -> seen.add(s.policy().getId()));
+			List<Scored> wider = new ArrayList<>(lexical);
+			for (Scored s : find(open, query.withoutKeywords(), today)) {
+				if (seen.add(s.policy().getId())) {
+					wider.add(new Scored(s.policy(), 0, s.score()));
+				}
+			}
+			broadened = wider.size() > lexical.size();
+			lexical = wider;
+		}
 		HarvesterSemanticSearch.Result semantic = semanticSearch.search(query);
 		Merged merged = merge(open, lexical, query, today, semantic);
 		List<Ranked> ranked = merged.candidates().stream().map(s -> {
@@ -164,6 +178,8 @@ public class SearchService {
 			.sorted(Comparator.comparingInt(Ranked::needHits)
 				.thenComparingDouble(Ranked::score)
 				.reversed()
+				// 같은 점수면 돈이 되는 혜택(현금·대출·이자·바우처)을 먼저 — 홈 추천순과 같은 규칙
+				.thenComparing(r -> !EligibilityService.givesMoney(r.item().policy().support()))
 				.thenComparingInt(r -> order(r.item().verdict()))
 				.thenComparing(r -> r.item().dDay() == null ? Integer.MAX_VALUE : r.item().dDay()))
 			.toList();
@@ -179,7 +195,8 @@ public class SearchService {
 		boolean knownExample = SearchExamples.query(text.strip().replaceAll("\\s+", " ")) != null;
 		return new SearchResponse(text, query, counts, shown.subList(from, to), page, size, shown.size(),
 				(shown.size() + size - 1) / size, shown.isEmpty() ? emptyMessage(open, query, today, ranked.size()) : null,
-				query.ai() || knownExample ? null : semantic.used() ? "검색어의 단어와 비슷한 뜻의 공고를 함께 찾았어요"
+				broadened ? "찾는 말과 딱 맞는 공고가 적어서, 비슷한 상황의 공고를 아래에 함께 보여 줘요"
+						: query.ai() || knownExample ? null : semantic.used() ? "검색어의 단어와 비슷한 뜻의 공고를 함께 찾았어요"
 						: "지금은 AI 검색을 쉬고 있어서 단어로 찾았어요",
 				new SemanticInfo(semantic.used(), merged.scores().size(), merged.addedIds().size()));
 	}
@@ -197,6 +214,9 @@ public class SearchService {
 		}
 		return "조건에 맞는 공고를 못 찾았어요. 다른 말로 검색해 보세요";
 	}
+
+	/** 원하는 것으로 찾은 공고가 이보다 적으면 넓혀 찾는다 */
+	static final int FEW_RESULTS = 5;
 
 	record Scored(Policy policy, int needHits, int score) {
 	}

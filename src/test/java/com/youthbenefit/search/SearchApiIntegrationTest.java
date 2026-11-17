@@ -88,6 +88,18 @@ class SearchApiIntegrationTest {
 	}
 
 	@Test
+	void narrowInterpretationIsBroadenedBySituation() throws Exception {
+		// AI 가 공고에 없는 말로 좁게 해석해도 신청자 상황(대학생)으로 넓혀 찾고, 넓혔다고 알려 준다
+		answer("대학생인데 돈 주는 거", """
+				{"need": [["구직촉진수당"]], "who": [["대학생"]], "categories": [], "region": "", "age": null, "closingSoon": false}
+				""");
+		mockMvc.perform(get("/api/v1/search").param("q", "대학생인데 돈 주는 거").header("X-Anonymous-Id", newDevice()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content[0].policy.title").value(org.hamcrest.Matchers.startsWith("대학생 천원의 아침밥")))
+			.andExpect(jsonPath("$.notice").value(org.hamcrest.Matchers.containsString("비슷한 상황의 공고")));
+	}
+
+	@Test
 	void personalizedSearchUsesEachOwnersProfileWithoutInventedKeywords() throws Exception {
 		String q = "나한테 맞는거 해줘.";
 		answer(q, """
