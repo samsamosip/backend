@@ -123,4 +123,39 @@ class DocumentListParserTest {
 			.containsExactly("개인정보 수집·이용 동의서");
 	}
 
+	@Test
+	void keepsFormsMarkedWithAttachmentNumbers() {
+		// "[붙임 1]" 안내가 붙어도 서류이고, "채용 공고문"도 서류다. 괄호 안 ①② 는 나누지 않는다
+		String raw = """
+				가. 주민등록초본(주소변동사항 포함) 1부
+				 나. 신청서 1부 [붙임 1]
+				 다. 개인정보 수집 및 이용 동의서 1부 [붙임 2]
+				 라. 채용 공고문 1부  *공고일 이전 면접의 경우 생략 가능
+				 마. 면접 증빙서류 일체(① 또는 ② 중 택1)""";
+		assertThat(names(raw)).containsExactly("주민등록초본(주소변동사항 포함) 1부", "신청서 1부 [붙임 1]",
+				"개인정보 수집 및 이용 동의서 1부 [붙임 2]", "채용 공고문 1부", "면접 증빙서류 일체(① 또는 ② 중 택1)");
+	}
+
+	@Test
+	void splitsInlineNumbersAndKeepsShortWordsWithTheirDocument() {
+		assertThat(names("1) 자립지원수당 지급신청서 2) 자립계획서 3) 입퇴소 확인서 4) 주민등록등본 및 신분증 사본"))
+			.containsExactly("자립지원수당 지급신청서", "자립계획서", "입퇴소 확인서", "주민등록등본 및 신분증 사본");
+		assertThat(names("◦ 국세, 지방세 완납증명서")).containsExactly("국세, 지방세 완납증명서");
+		assertThat(names("읍면동 행정복지센터 신청, 접수")).doesNotContain("접수");
+	}
+
+	@Test
+	void dropsExplanationsUnderNumberedDocuments() {
+		String raw = """
+				⚠️중요⚠️
+				▪️ 모든 제출 서류는 예외 없이 공고일 이후 발급분만 인정 됩니다.
+				(온라인 제출)
+				▪️  지원신청서 : 작성 및 체크사항 누락 없이 작성
+				1. 최종학력증명서 :
+				▪️ 가장 마지막 입학 학교를 최종 학교로 간주
+				2. 주민등록표 등본
+				▪️ 본인 기준 상세증명서로 발급(모든 정보 표기)""";
+		assertThat(names(raw)).containsExactly("지원신청서", "최종학력증명서", "주민등록표 등본");
+	}
+
 }

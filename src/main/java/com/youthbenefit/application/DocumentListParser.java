@@ -22,7 +22,7 @@ public final class DocumentListParser {
 
 	/** 줄 앞 번호·기호: ① 1. 1) 가. 나) - ㅇ ○ □ ■ • · ▶ 등 */
 	private static final Pattern LEADING_MARK = Pattern.compile(
-			"^\\s*(?:[\\u2460-\\u2473\\u2776-\\u277F]|\\d{1,2}[.)]|[가나다라마바사아자차카타파하][.)]|[-ㅇ○□■•·▶◦●*]|\\(\\d{1,2}\\))\\s*");
+			"^\\s*(?:[\\u2460-\\u2473\\u2776-\\u277F]|\\d{1,2}[.)]|[가나다라마바사아자차카타파하][.)]|[-ㅇ○□■•·▶◦●*▪▫◆◇►▸✔✓❍❖]|\\(\\d{1,2}\\))\\s*");
 
 	private static final Pattern NUMBERED = Pattern
 		.compile("^\\s*(?:[\\u2460-\\u2473\\u2776-\\u277F]|\\d{1,2}[.)]|[가나다라마바사아자차카타파하][.)]|\\(\\d{1,2}\\))");
@@ -52,10 +52,17 @@ public final class DocumentListParser {
 	private static final Pattern TRAILING_VERB = Pattern.compile("\\s*(제출|첨부)$");
 
 	private static final List<String> NOTE_WORDS = List.of("붙임", "첨부", "자세한", "홈페이지", "참고", "http", "문의",
-			"별도", "공고문", "확인하시기", "바랍니다", "부탁드립니다", "참조", "따름", "따라", "안내", "아래 ", "다음 중");
+			"별도", "확인하시기", "바랍니다", "부탁드립니다", "참조", "따름", "따라", "안내", "아래 ", "다음 중");
 
 	/** 한 줄 안에 이어 쓴 ①②③ 앞에서 나눈다 */
 	private static final Pattern INLINE_CIRCLED = Pattern.compile("(?<=\\S)\\s*(?=[\\u2460-\\u2473\\u2776-\\u277F])");
+
+	/** 한 줄 안에 이어 쓴 "1) 신청서 2) 계획서 3) …" 앞에서 나눈다 (두 개 이상일 때만) */
+	private static final Pattern INLINE_NUMBERED = Pattern.compile("(?<=\\S)\\s+(?=\\d{1,2}\\)\\s*\\S)");
+
+	/** 끝에 붙은 서식 안내: "신청서 1부 [붙임 1]", "동의서(별지 제2호)" — 안내 단어가 있어도 앞은 서류 이름이다 */
+	private static final Pattern TRAILING_FORM_TAG = Pattern
+		.compile("\\s*[\\[(]\\s*(붙임|별지|별첨|첨부|서식)[^\\])]*[\\])]\\s*$");
 
 	/** "(공 통)", "(우선선발)" 같은 줄 앞 괄호 머리말 */
 	private static final Pattern PAREN_LABEL = Pattern.compile("^\\(\\s*[^()]{1,8}?\\s*\\)\\s*");
@@ -78,13 +85,25 @@ public final class DocumentListParser {
 			return List.of();
 		}
 		Map<String, Document> out = new LinkedHashMap<>();
-		for (String rawLine : joinWrappedLines(unescapeHtml(raw).split("\\R"))) {
+		// "▪️", "⚠️" 처럼 그림 글자로 쓴 기호는 글자 모양 선택자를 떼고 경고 표시는 지운다
+		String text = unescapeHtml(raw).replace("\uFE0F", "").replace("⚠", "");
+		boolean sawNumbered = false;
+		for (String rawLine : joinWrappedLines(text.split("\\R"))) {
+			String stripped = rawLine.strip();
 			// 안내문 안의 ①② 는 서류 번호가 아니다: "※ 파일을 묶어서 제출(①,②한글파일, ③PDF파일)"
-			if (isNote(rawLine.strip())) {
+			if (isNote(stripped)) {
 				continue;
 			}
-			for (String piece : INLINE_CIRCLED.split(rawLine)) {
-				addLine(out, piece);
+			// "1. 최종학력증명서" 아래 "▪ 가장 마지막 입학 학교를 …" 는 그 서류의 설명이다
+			if (sawNumbered && stripped.startsWith("▪")) {
+				continue;
+			}
+			sawNumbered = sawNumbered || NUMBERED.matcher(stripped).find();
+			for (String piece : splitInlineCircled(rawLine)) {
+				List<String> numbered = INLINE_NUMBERED.splitAsStream(piece).toList();
+				for (String one : numbered.size() >= 2 ? numbered : List.of(piece)) {
+					addLine(out, one);
+				}
 			}
 		}
 		return new ArrayList<>(out.values());
@@ -123,6 +142,29 @@ public final class DocumentListParser {
 				|| line.startsWith("<") || line.startsWith("〈");
 	}
 
+	/** 괄호 밖에서 ①②③ 앞을 나눈다. "면접 증빙서류 일체(① 또는 ② 중 택1)" 처럼 괄호 안의 번호는 그대로 둔다 */
+	private static List<String> splitInlineCircled(String line) {
+		List<String> parts = new ArrayList<>();
+		int depth = 0;
+		int start = 0;
+		for (int i = 0; i < line.length(); i++) {
+			char c = line.charAt(i);
+			if (c == '(' || c == '[' || c == '（') {
+				depth++;
+			}
+			else if ((c == ')' || c == ']' || c == '）') && depth > 0) {
+				depth--;
+			}
+			else if (depth == 0 && (c >= 0x2460 && c <= 0x2473 || c >= 0x2776 && c <= 0x277F)
+					&& !line.substring(start, i).isBlank()) {
+				parts.add(line.substring(start, i));
+				start = i;
+			}
+		}
+		parts.add(line.substring(start));
+		return parts;
+	}
+
 	private static boolean inlineCircledList(String line) {
 		return line.codePoints().filter(c -> c >= 0x2460 && c <= 0x2473 || c >= 0x2776 && c <= 0x277F).count() >= 2;
 	}
@@ -142,7 +184,7 @@ public final class DocumentListParser {
 			}
 			line = PAREN_LABEL.matcher(line).replaceFirst("");
 			boolean numbered = NUMBERED.matcher(line).find();
-			boolean bulletHeader = line.startsWith("○") || line.startsWith("■");
+			boolean bulletHeader = line.startsWith("○") || line.startsWith("■") || line.startsWith("❍");
 			boolean letterHeader = LETTER_MARK.matcher(line).find();
 			line = LEADING_MARK.matcher(line).replaceFirst("");
 			// "○ 공통", "○ 근로자", "○ 선정 후(치료비 신청 시)" 같은 소제목
@@ -181,7 +223,7 @@ public final class DocumentListParser {
 				numbered = false;
 			}
 		}
-		List<String> parts = numbered ? List.of(text) : splitOutsideParentheses(text, ',');
+		List<String> parts = numbered ? List.of(text) : joinShortWords(splitOutsideParentheses(text, ','));
 		for (String part : parts) {
 			String name = cleanName(part);
 			if (name == null) {
@@ -190,6 +232,28 @@ public final class DocumentListParser {
 			boolean itemOptional = optional || isOptionalTag(name);
 			out.putIfAbsent(name, new Document(name, itemOptional));
 		}
+	}
+
+	/** "국세, 지방세 완납증명서" 처럼 짧은 낱말은 뒤 이름과 한 서류다: "국세" 를 따로 떼지 않는다 */
+	private static List<String> joinShortWords(List<String> parts) {
+		List<String> out = new ArrayList<>();
+		String carry = null;
+		for (String part : parts) {
+			String p = part.strip();
+			if (carry != null) {
+				p = carry + ", " + p;
+				carry = null;
+			}
+			if (p.length() <= 3 && !DOCUMENT_ENDING.matcher(p).find()) {
+				carry = p;
+				continue;
+			}
+			out.add(p);
+		}
+		if (carry != null) {
+			out.add(carry);
+		}
+		return out;
 	}
 
 	private static boolean isOptionalTag(String text) {
@@ -213,7 +277,8 @@ public final class DocumentListParser {
 			}
 		}
 		name = name.replaceAll("\\s*등\\s*\\d+\\s*종$", "").replaceAll("^(?:및|또는)\\s+", "").strip();
-		String lower = name.toLowerCase();
+		// 서식 안내는 이름에 남기되("신청서 1부(서식 1)"), 안내 단어 검사에서는 뺀다
+		String lower = TRAILING_FORM_TAG.matcher(name).replaceFirst("").toLowerCase();
 		if (NOTE_WORDS.stream().anyMatch(lower::contains)) {
 			return null;
 		}
@@ -224,6 +289,14 @@ public final class DocumentListParser {
 		}
 		String core = withoutTrailingParentheses(name);
 		if (core.isEmpty() || SECTION_HEADER.matcher(core).find() || SENTENCE_ENDING.matcher(core).find()) {
+			return null;
+		}
+		// "~ 인정 됩니다." 처럼 문장으로 끝나면 안내문이다
+		if (core.endsWith("니다") || core.endsWith("니다.") || core.endsWith("다.")) {
+			return null;
+		}
+		// "접수", "조건", "중요" 처럼 서류 이름으로 끝나지 않는 짧은 낱말 조각
+		if (core.length() <= 3 && !DOCUMENT_ENDING.matcher(core).find()) {
 			return null;
 		}
 		return name;
