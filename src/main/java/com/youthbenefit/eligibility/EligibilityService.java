@@ -94,7 +94,7 @@ public class EligibilityService {
 	}
 
 	/**
-	 * @param recommended 추천순(조건 일치 → 확인 필요 → 불일치, 같으면 마감 임박순). false 면 마감순만
+	 * @param recommended 추천순(돈이 되는 혜택 → 나머지 → 불일치, 그 안에서 조건 일치 → 확인 필요, 같으면 마감 임박순). false 면 마감순만
 	 */
 	@Transactional(readOnly = true)
 	public MatchesResponse matches(UUID anonymousId, String category, Verdict verdictFilter, boolean includeNoMatch,
@@ -120,8 +120,13 @@ public class EligibilityService {
 		MatchesResponse.Counts counts = new MatchesResponse.Counts(count(judged, Verdict.MATCH),
 				count(judged, Verdict.NEEDS_CHECK), count(judged, Verdict.NO_MATCH));
 		if (recommended) {
-			// 공고는 이미 마감 임박순이라 판정 순서로만 다시 줄 세운다(같은 판정 안에서는 마감 임박순 유지)
-			judged = judged.stream().sorted(Comparator.comparingInt(m -> m.verdict().ordinal())).toList();
+			// 공고는 이미 마감 임박순이라 묶음 → 판정 순서로만 다시 줄 세운다(그 안에서는 마감 임박순 유지).
+			// 묶음: 돈이 되는 혜택 → 나머지(교육·행사·상담 등) → 조건 불일치. 조건이 아예 없는 교육·행사·기관 운영 공고가
+			// 「조건 일치」로 홈 맨 위를 채우던 것을 막는다(처음 온 사람의 조건 일치 55건 중 금액 있는 혜택은 1건).
+			judged = judged.stream()
+				.sorted(Comparator.<MatchItem>comparingInt(EligibilityService::recommendTier)
+					.thenComparingInt(m -> m.verdict().ordinal()))
+				.toList();
 		}
 		List<MatchItem> filtered = judged.stream()
 			.filter(m -> verdictFilter != null ? m.verdict() == verdictFilter
@@ -132,6 +137,20 @@ public class EligibilityService {
 		int to = Math.min(from + size, filtered.size());
 		int totalPages = size == 0 ? 0 : (filtered.size() + size - 1) / size;
 		return new MatchesResponse(counts, filtered.subList(from, to), page, size, filtered.size(), totalPages);
+	}
+
+	private static int recommendTier(MatchItem m) {
+		if (m.verdict() == Verdict.NO_MATCH) {
+			return 2;
+		}
+		return givesMoney(m.policy().support()) ? 0 : 1;
+	}
+
+	/** 현금·대출·이자·바우처처럼 돈이 되는 지원인지 (금액을 알거나 종류가 그렇다) */
+	static boolean givesMoney(com.youthbenefit.policy.Support support) {
+		// Set.of(...).contains(null) 은 예외라 종류가 없을 때를 먼저 거른다
+		return support != null && (support.amountWon() != null || support.kind() != null
+				&& java.util.Set.of("CASH", "LOAN", "INTEREST", "VOUCHER").contains(support.kind()));
 	}
 
 	/** 지금 신청 가능한 공고 (메모리에 들고 있는 것, {@link PolicyCatalog}). category 는 공식 대분류 */

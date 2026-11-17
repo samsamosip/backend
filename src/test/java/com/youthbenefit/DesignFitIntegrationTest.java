@@ -89,17 +89,27 @@ class DesignFitIntegrationTest {
 	}
 
 	@Test
-	void recommendedSortPutsMatchesFirst() throws Exception {
+	void recommendedSortPutsMoneyThenMatchesFirst() throws Exception {
 		String body = mockMvc.perform(get("/api/v1/me/matches").param("includeNoMatch", "true").header("X-Anonymous-Id", me))
 			.andExpect(status().isOk())
 			.andReturn()
 			.getResponse()
 			.getContentAsString();
-		List<String> verdicts = JsonPath.read(body, "$.content[*].verdict");
+		// 돈이 되는 혜택 → 나머지 → 불일치, 같은 묶음 안에서는 조건 일치 → 확인 필요
+		List<Map<String, Object>> items = JsonPath.read(body, "$.content[*]");
 		List<String> order = List.of("MATCH", "NEEDS_CHECK", "NO_MATCH");
-		assertThat(verdicts).isSortedAccordingTo((a, b) -> order.indexOf(a) - order.indexOf(b));
+		assertThat(items).isSortedAccordingTo(java.util.Comparator.<Map<String, Object>>comparingInt(
+				m -> "NO_MATCH".equals(m.get("verdict")) ? 2 : money(m) ? 0 : 1)
+			.thenComparingInt(m -> order.indexOf(m.get("verdict"))));
 		mockMvc.perform(get("/api/v1/me/matches").param("sort", "deadline").header("X-Anonymous-Id", me))
 			.andExpect(status().isOk());
+	}
+
+	@SuppressWarnings("unchecked")
+	private static boolean money(Map<String, Object> item) {
+		Map<String, Object> support = (Map<String, Object>) ((Map<String, Object>) item.get("policy")).get("support");
+		return support != null && (support.get("amountWon") != null
+				|| java.util.Arrays.asList("CASH", "LOAN", "INTEREST", "VOUCHER").contains(support.get("kind")));
 	}
 
 	@Test
