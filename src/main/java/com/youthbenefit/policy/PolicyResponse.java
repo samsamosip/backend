@@ -39,6 +39,15 @@ public record PolicyResponse(
 		String sourceUrl,
 		List<Document> documents) {
 
+	/** 원문의 HTML 기호(&apos; 등)는 내보낼 때 글자로 되돌린다 */
+	public PolicyResponse {
+		title = HtmlText.unescape(title);
+		description = HtmlText.unescape(description);
+		supportContent = HtmlText.unescape(supportContent);
+		organization = HtmlText.unescape(organization);
+		submissionDocuments = HtmlText.unescape(submissionDocuments);
+	}
+
 	/** 제출 서류 한 줄 (공고 상세 "제출 서류" 목록, 준비함 체크리스트와 같은 쪼개기). guide 는 발급처, 모르면 null */
 	public record Document(String name, boolean optional,
 			com.youthbenefit.application.DocumentGuides.Guide guide) {

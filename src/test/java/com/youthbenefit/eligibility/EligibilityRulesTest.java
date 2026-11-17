@@ -148,6 +148,22 @@ class EligibilityRulesTest {
 	}
 
 	@Test
+	void otherCodeIsNotGroundsForNoMatch() {
+		// "중소기업, 기타": 기타가 무엇인지는 원문에만 있어서, 특화 대상이 없는 사람도 걸러내지 않는다
+		Policy smeOrOther = policy("sbizCd", "0014001,0014009");
+		PolicyEligibility none = judge(smeOrOther, jimin(null, List.of(), LocalDate.of(2003, 6, 12)));
+		assertThat(none.verdict()).isEqualTo(Verdict.NEEDS_CHECK);
+		assertThat(none.conditions()).extracting(ConditionResult::requirement).containsExactly("중소기업 등 (원문 확인)");
+		assertThat(judge(smeOrOther, jimin(null, List.of("0014001"), LocalDate.of(2003, 6, 12))).verdict())
+			.isEqualTo(Verdict.MATCH);
+
+		// 취업 상태가 "기타"뿐이면 미취업자도 확인 필요, 화면에는 "기타" 대신 무엇을 볼지
+		PolicyEligibility otherJob = judge(policy("jobCd", "0013009"));
+		assertThat(otherJob.verdict()).isEqualTo(Verdict.NEEDS_CHECK);
+		assertThat(otherJob.conditions()).extracting(ConditionResult::requirement).containsExactly("공고 원문에 적힌 대상");
+	}
+
+	@Test
 	void textOnlyConditionsStayUnknown() {
 		// 해석하지 못한 필수 조건이 남으면 조건 일치로 단정하지 않는다
 		PolicyEligibility e = judge(policy("earnCndSeCd", "0043003", "earnEtcCn", "가구 기준중위소득 60% 이하",

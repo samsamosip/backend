@@ -54,6 +54,10 @@ public final class ConditionEvaluator {
 			case Check check -> {
 				Object mine = facts.get(check.var());
 				Truth t = mine == null ? Truth.UNKNOWN : compare(check, mine);
+				// 공고가 "기타"를 대상에 넣었으면 내 값이 다른 항목이어도 원문에 따라 될 수 있다 — 거르지 않고 확인 필요로
+				if (t == Truth.FALSE && includesOther(check)) {
+					t = Truth.UNKNOWN;
+				}
 				Truth shown = negated ? t.not() : t;
 				out.add(new ConditionResult(LABELS.getOrDefault(check.var(), check.var()), shown,
 						(negated ? "제외: " : "") + describe(check), mine == null ? null : describeValue(check.var(), mine),
@@ -98,8 +102,20 @@ public final class ConditionEvaluator {
 		return ((Number) value).longValue();
 	}
 
+	/** 온통청년 코드 중 "기타" (취업 상태, 학력, 전공, 특화 대상). 무엇을 가리키는지는 공고 원문에만 있다. */
+	static final java.util.Set<String> OTHER_CODES = java.util.Set.of("0013009", "0049009", "0011008", "0014009");
+
+	static boolean includesOther(Check c) {
+		return (c.cmp() == Cmp.IN || c.cmp() == Cmp.INTERSECTS) && c.values().stream().anyMatch(OTHER_CODES::contains);
+	}
+
 	static String describe(Check c) {
 		List<String> v = c.values();
+		if (includesOther(c)) {
+			// "미취업자, 기타"는 "미취업자 등 (원문 확인)", "기타"뿐이면 무엇인지 원문에서 봐야 한다
+			List<String> named = v.stream().filter(code -> !OTHER_CODES.contains(code)).map(code -> label(c.var(), code)).toList();
+			return named.isEmpty() ? "공고 원문에 적힌 대상" : String.join(", ", named) + " 등 (원문 확인)";
+		}
 		return switch (c.var()) {
 			case "age" -> switch (c.cmp()) {
 				case BETWEEN -> "만 " + v.get(0) + "~" + v.get(1) + "세";

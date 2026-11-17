@@ -1,5 +1,6 @@
 package com.youthbenefit.application;
 
+import com.youthbenefit.policy.HtmlText;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.youthbenefit.policy.Policy;
 import com.youthbenefit.policy.PolicySource;
@@ -53,6 +54,11 @@ public final class ApplicationResponses {
 			ApplicationStatus status, String statusLabel, LocalDateTime appliedAt, Deadline deadline, Progress progress,
 			int documentChanges) {
 
+		public Summary {
+			title = HtmlText.unescape(title);
+			organization = HtmlText.unescape(organization);
+		}
+
 		static Summary of(Application a, LocalDate today) {
 			Policy p = a.getPolicy();
 			int documentChanges = (int) a.getItems().stream().filter(i -> i.getPolicyChange() != null).count();
@@ -84,6 +90,12 @@ public final class ApplicationResponses {
 			ApplicationStatus status, String statusLabel, LocalDateTime appliedAt, Deadline deadline, Progress progress,
 			List<Item> items, String submissionDocumentsRaw, String applyUrl, String applyMethod, String category,
 			String memo) {
+
+		public Detail {
+			title = HtmlText.unescape(title);
+			organization = HtmlText.unescape(organization);
+			submissionDocumentsRaw = HtmlText.unescape(submissionDocumentsRaw);
+		}
 
 		static Detail of(Application a, LocalDate today) {
 			Policy p = a.getPolicy();

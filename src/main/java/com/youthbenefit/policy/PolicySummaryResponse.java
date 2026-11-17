@@ -21,6 +21,12 @@ public record PolicySummaryResponse(
 		List<String> regions,
 		Support support) {
 
+	public PolicySummaryResponse {
+		title = HtmlText.unescape(title);
+		description = HtmlText.unescape(description);
+		organization = HtmlText.unescape(organization);
+	}
+
 	public static PolicySummaryResponse from(Policy p) {
 		return new PolicySummaryResponse(p.getId(), p.getSource(), p.getTitle(), p.getDescription(),
 				PolicyResponse.split(p.getCategoryGroup()), p.getOrganization(), p.getApplyPeriodCode(),

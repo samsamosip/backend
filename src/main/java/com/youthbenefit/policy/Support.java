@@ -31,6 +31,11 @@ import tools.jackson.databind.json.JsonMapper;
 public record Support(String label, Long amountWon, String period, boolean upTo, String kind, String summary,
 		String source, Integer months) {
 
+	public Support {
+		label = HtmlText.unescape(label);
+		summary = HtmlText.unescape(summary);
+	}
+
 	/** 프롬프트를 바꾸면 올린다 — 해시가 달라져서 다시 뽑는다 */
 	public static final String PROMPT_VERSION = "s1";
 

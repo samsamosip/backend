@@ -39,6 +39,12 @@ public final class NotificationResponses {
 	}
 
 	public record NewPolicy(Long policyId, String title, String organization, String verdict, String verdictLabel) {
+
+		public NewPolicy {
+			title = com.youthbenefit.policy.HtmlText.unescape(title);
+			organization = com.youthbenefit.policy.HtmlText.unescape(organization);
+		}
+
 	}
 
 	/** 마감 임박. daysLeft 0 = 오늘 마감. */

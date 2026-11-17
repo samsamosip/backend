@@ -12,4 +12,11 @@ package com.youthbenefit.eligibility;
  */
 public record ConditionResult(String label, Truth truth, String requirement, String myValue, String missingField,
 		String evidence) {
+
+	/** 원문에서 가져온 글의 HTML 기호(&apos; 등)는 글자로 되돌린다 */
+	public ConditionResult {
+		requirement = com.youthbenefit.policy.HtmlText.unescape(requirement);
+		evidence = com.youthbenefit.policy.HtmlText.unescape(evidence);
+	}
+
 }
