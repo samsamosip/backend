@@ -158,4 +158,20 @@ class DocumentListParserTest {
 		assertThat(names(raw)).containsExactly("지원신청서", "최종학력증명서", "주민등록표 등본");
 	}
 
+	@Test
+	void alternativesUnderChooseOneAreOptional() {
+		String raw = """
+				가. 신청서 1부
+				 마. 면접 증빙서류 일체(① 또는 ② 중 택1)
+				① 면접확인서
+				② 면접확인서 대체 서약서 + 면접 증빙 자료
+				바. 통장 사본""";
+		assertThat(DocumentListParser.parse(raw)).extracting(Document::name, Document::optional).containsExactly(
+				org.assertj.core.groups.Tuple.tuple("신청서 1부", false),
+				org.assertj.core.groups.Tuple.tuple("면접 증빙서류 일체(① 또는 ② 중 택1)", false),
+				org.assertj.core.groups.Tuple.tuple("면접확인서", true),
+				org.assertj.core.groups.Tuple.tuple("면접확인서 대체 서약서 + 면접 증빙 자료", true),
+				org.assertj.core.groups.Tuple.tuple("통장 사본", false));
+	}
+
 }

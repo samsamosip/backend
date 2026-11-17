@@ -64,6 +64,9 @@ public final class DocumentListParser {
 	private static final Pattern TRAILING_FORM_TAG = Pattern
 		.compile("\\s*[\\[(]\\s*(붙임|별지|별첨|첨부|서식)[^\\])]*[\\])]\\s*$");
 
+	/** "면접 증빙서류 일체(① 또는 ② 중 택1)" 처럼 아래 ①② 중 하나만 내면 되는 줄 */
+	private static final Pattern CHOOSE_ONE_HEADER = Pattern.compile("택\\s?1|택일|중\\s*하나");
+
 	/** "(공 통)", "(우선선발)" 같은 줄 앞 괄호 머리말 */
 	private static final Pattern PAREN_LABEL = Pattern.compile("^\\(\\s*[^()]{1,8}?\\s*\\)\\s*");
 
@@ -88,6 +91,7 @@ public final class DocumentListParser {
 		// "▪️", "⚠️" 처럼 그림 글자로 쓴 기호는 글자 모양 선택자를 떼고 경고 표시는 지운다
 		String text = unescapeHtml(raw).replace("\uFE0F", "").replace("⚠", "");
 		boolean sawNumbered = false;
+		boolean chooseOneOpen = false;
 		for (String rawLine : joinWrappedLines(text.split("\\R"))) {
 			String stripped = rawLine.strip();
 			// 안내문 안의 ①② 는 서류 번호가 아니다: "※ 파일을 묶어서 제출(①,②한글파일, ③PDF파일)"
@@ -99,10 +103,13 @@ public final class DocumentListParser {
 				continue;
 			}
 			sawNumbered = sawNumbered || NUMBERED.matcher(stripped).find();
+			// "택1" 줄 바로 아래 ①② 서류는 둘 중 하나만 내면 되니 선택으로
+			boolean alternative = chooseOneOpen && startsWithCircled(stripped);
+			chooseOneOpen = alternative || CHOOSE_ONE_HEADER.matcher(stripped).find() && !startsWithCircled(stripped);
 			for (String piece : splitInlineCircled(rawLine)) {
 				List<String> numbered = INLINE_NUMBERED.splitAsStream(piece).toList();
 				for (String one : numbered.size() >= 2 ? numbered : List.of(piece)) {
-					addLine(out, one);
+					addLine(out, one, alternative);
 				}
 			}
 		}
@@ -165,6 +172,11 @@ public final class DocumentListParser {
 		return parts;
 	}
 
+	private static boolean startsWithCircled(String line) {
+		return !line.isEmpty() && (line.charAt(0) >= 0x2460 && line.charAt(0) <= 0x2473
+				|| line.charAt(0) >= 0x2776 && line.charAt(0) <= 0x277F);
+	}
+
 	private static boolean inlineCircledList(String line) {
 		return line.codePoints().filter(c -> c >= 0x2460 && c <= 0x2473 || c >= 0x2776 && c <= 0x277F).count() >= 2;
 	}
@@ -176,7 +188,7 @@ public final class DocumentListParser {
 				|| stripped.startsWith("[");
 	}
 
-	private static void addLine(Map<String, Document> out, String rawLine) {
+	private static void addLine(Map<String, Document> out, String rawLine, boolean alternative) {
 		{
 			String line = rawLine.strip();
 			if (line.isEmpty() || isNote(line)) {
@@ -200,14 +212,14 @@ public final class DocumentListParser {
 			// 띄어 쓰지 않은 "/" 는 "발생일/신고일" 같은 설명 안에 있어서 나누지 않는다
 			List<String> segments = numbered ? List.of(beforeSpacedSlash(line)) : splitOutsideParentheses(line, '/');
 			for (String segment : segments) {
-				addSegment(out, segment, numbered);
+				addSegment(out, segment, numbered, alternative);
 			}
 		}
 	}
 
-	private static void addSegment(Map<String, Document> out, String segment, boolean numbered) {
+	private static void addSegment(Map<String, Document> out, String segment, boolean numbered, boolean alternative) {
 		String text = segment.strip();
-		boolean optional = false;
+		boolean optional = alternative;
 		var tag = TAG_PREFIX.matcher(text);
 		if (tag.find() && tag.end() < text.length()) {
 			optional = isOptionalTag(tag.group(1) != null ? tag.group(1) : tag.group(2));

@@ -95,6 +95,7 @@ public final class ApplicationResponses {
 			title = HtmlText.unescape(title);
 			organization = HtmlText.unescape(organization);
 			submissionDocumentsRaw = HtmlText.unescape(submissionDocumentsRaw);
+			applyMethod = HtmlText.unescape(applyMethod);
 		}
 
 		static Detail of(Application a, LocalDate today) {
