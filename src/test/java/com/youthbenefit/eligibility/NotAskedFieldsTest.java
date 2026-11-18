@@ -13,20 +13,20 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/** 화면에서 받지 않는 가구 중위소득 %는 "입력하세요"로 안내하지 않는다 (10/28 팀 결정: 소득은 본인 연소득만). 주택 소유는 체크칸으로 받는다 */
+/** 가구 중위소득 %는 11/18부터 화면이 가구원 수·월 소득으로 계산해 받으므로 "입력하세요"로 안내한다. 주택 소유는 체크칸으로 받는다 */
 class NotAskedFieldsTest {
 
 	private static final Condition HOUSING = new All(List.of(new Check("householdMedianIncomePct", Cmp.LTE, List.of("150"), "e"),
 			new Check("homeowner", Cmp.IN, List.of("false"), "e"), new Check("annualIncome", Cmp.LTE, List.of("5000"), "e")));
 
 	@Test
-	void unknownMedianIncomeAndHomeownerPointToTheNotice() {
+	void unknownMedianIncomeAndHomeownerAskForInput() {
 		ConditionEvaluator.Evaluation e = ConditionEvaluator.evaluate(HOUSING, ProfileFacts.empty());
 		assertThat(e.conditions()).extracting(ConditionResult::missingField)
-			.containsExactly(null, "homeowner", "annualIncome");
+			.containsExactly("householdMedianIncomePct", "homeowner", "annualIncome");
 		assertThat(EligibilityService.explanation(Verdict.NEEDS_CHECK, e))
-			.isEqualTo("주택 소유·소득을 입력하고, 가구 소득은 공고 원문에서 확인해 주세요");
-		assertThat(EligibilityService.summary(Verdict.NEEDS_CHECK, e)).isEqualTo("주택 소유·소득 정보·가구 소득 확인 필요");
+			.isEqualTo("가구 소득·주택 소유·소득을 입력하면 바로 확인돼요");
+		assertThat(EligibilityService.summary(Verdict.NEEDS_CHECK, e)).isEqualTo("가구 소득·주택 소유 외 1 정보 확인 필요");
 	}
 
 	@Test

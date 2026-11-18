@@ -37,7 +37,15 @@ public final class OntongConditions {
 	public static Condition from(Policy p) {
 		AiConditions ai = ai(p);
 		if (ai == null) {
-			return original(p);
+			// 원래 방식 그대로, 소득 기타 글이 중위소득 기준 하나뿐이면 규칙으로 (공고 변경 비교용 original 은 그대로 둔다)
+			Condition original = original(p);
+			Check median = INCOME_OTHER.equals(p.getEarnCndSeCd()) ? MedianIncomeText.read(p.getEarnEtcCn()) : null;
+			if (median == null || !(original instanceof All all)) {
+				return original;
+			}
+			return new All(all.children().stream()
+				.map(c -> c instanceof Unparsed u && "소득 조건".equals(u.label()) ? median : c)
+				.toList());
 		}
 		List<Condition> children = new ArrayList<>(structured(p).children());
 		children.addAll(aiChildren(ai));
@@ -51,6 +59,12 @@ public final class OntongConditions {
 			children.add(new Check(r.var(), r.cmp(), r.values(), "AI가 원문에서 읽음: " + r.evidence()));
 		}
 		for (AiConditions.Unresolved u : ai.unresolved()) {
+			// "중위소득 150% 이하"만 적힌 글은 가구 소득 규칙으로 (화면에서 가구원 수·월 소득으로 % 를 받는다)
+			Check median = u.exclusion() ? null : MedianIncomeText.read(u.text());
+			if (median != null) {
+				children.add(median);
+				continue;
+			}
 			Unparsed unparsed = new Unparsed(u.label(), u.text());
 			children.add(u.exclusion() ? new Not(unparsed) : unparsed);
 		}

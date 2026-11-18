@@ -166,14 +166,14 @@ class EligibilityRulesTest {
 	@Test
 	void textOnlyConditionsStayUnknown() {
 		// 해석하지 못한 필수 조건이 남으면 조건 일치로 단정하지 않는다
-		PolicyEligibility e = judge(policy("earnCndSeCd", "0043003", "earnEtcCn", "가구 기준중위소득 60% 이하",
+		PolicyEligibility e = judge(policy("earnCndSeCd", "0043003", "earnEtcCn", "가구 기준중위소득 60% 이하이면서 재산 3억 원 이하",
 				"addAplyQlfcCndCn", "무주택자", "ptcpPrpTrgtCn", "기존 수혜자 제외"));
 
 		assertThat(e.verdict()).isEqualTo(Verdict.NEEDS_CHECK);
 		assertThat(e.summary()).isEqualTo("소득 조건·추가 자격 조건 외 1 확인 필요");
 		assertThat(e.explanation()).isEqualTo("소득 조건·추가 자격 조건·참여 제한 대상은 공고 원문에서 확인해 주세요");
 		assertThat(e.conditions()).extracting(ConditionResult::evidence)
-			.containsExactly("가구 기준중위소득 60% 이하", "무주택자", "기존 수혜자 제외");
+			.containsExactly("가구 기준중위소득 60% 이하이면서 재산 3억 원 이하", "무주택자", "기존 수혜자 제외");
 		assertThat(e.conditions().getLast().requirement()).startsWith("해당하면 제외");
 	}
 
